@@ -12,6 +12,11 @@ Schnelle Bereichs-Screenshots für Ubuntu/GNOME unter Wayland: aufnehmen → Vor
 | Kopieren (als Bild) | `Strg+C` oder „Kopieren" im Vorschaufenster |
 | Speichern (PNG) | `Strg+S` oder „Speichern" |
 | Verwerfen | `Entf`, „Löschen" oder Fenster schließen – ohne Rückfrage |
+| Vorschau zoomen | `Strg+Mausrad` (am Mauszeiger verankert, 10 % bis 500 %) · Doppelklick: eingepasst ↔ 100 % |
+| Ausschnitt verschieben | Bild mit linker Maustaste ziehen · Mausrad (mit `Umschalt` horizontal) |
+| Einpassen / 100 % | `Strg+0` / `Strg+1` |
+
+Zoom betrifft nur die Anzeige: Kopieren und Speichern liefern immer das Original in voller Auflösung. 100 % heißt ein Bildpixel je Bildschirmpixel.
 
 Jeder Screenshot bekommt ein eigenes Vorschaufenster; die Fenster sind der Zwischenspeicher (nur im RAM, keine temporären Dateien). Das Tastenkürzel lässt sich unter **Einstellungen → Apps → Porthole → Globale Tastenkürzel** ändern. Autostart: Tray-Menü → „Beim Anmelden starten".
 
@@ -49,6 +54,7 @@ Die installierte `.desktop`-Datei ist Pflicht: nur damit akzeptiert das xdg-desk
 - **Freeze-Frame:** Erst nimmt das Screenshot-Portal den ganzen Desktop auf, dann zeigt Porthole ihn je Monitor als Vollbild-Standbild mit Abdunklung und schneidet lokal zu. Das Overlay kann so nie im Bild landen. (Ein Wayland-Client kann weder „durch sich hindurch" sehen noch Fenster frei platzieren.)
 - `capture/` – Backends hinter `trait CaptureBackend`, UI-frei. Aktuell `PortalScreenshotBackend`.
 - `geometry.rs`, `monitors.rs` – Koordinatenräume Stage ↔ Bild ↔ Fenster, rein verhältnisbasiert; Layout direkt von Mutter. Unit-getestet inkl. Mehrschirm/Mixed-DPI.
+- `viewport.rs` – Zoom-/Pan-Zustand der Vorschau (Einpassen vs. manueller Zoom, zeigerverankerter Zoom, Pan-Grenzen), GTK-frei und unit-getestet. `ui/zoom_view.rs` zeichnet damit die unveränderte Textur; skaliert wird je Frame auf der GPU.
 - `controller.rs` – Zustandsautomat `Idle → Capturing → Selecting → Cropping → Idle`.
 - `ui/` – Auswahl-Overlay, Vorschaufenster, kleines Hauptfenster. `services/` – Zwischenablage, Speichern, Tastenkürzel, Tray, Autostart.
 

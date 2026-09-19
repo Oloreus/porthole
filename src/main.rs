@@ -8,6 +8,7 @@ mod portal;
 mod screenshot;
 mod services;
 mod ui;
+mod viewport;
 
 use gtk::glib;
 use gtk::prelude::*;

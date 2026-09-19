@@ -6,6 +6,7 @@ use gtk::{gdk, gio, glib};
 use crate::screenshot::Screenshot;
 use crate::services::save::SaveOutcome;
 use crate::services::{clipboard, save};
+use crate::ui::zoom_view::ZoomView;
 
 const MIN_WIDTH: i32 = 380;
 const MIN_HEIGHT: i32 = 160;
@@ -19,14 +20,13 @@ pub fn present(app: &impl IsA<gtk::Application>, screenshot: Screenshot) {
     let screenshot = Rc::new(screenshot);
     let (pixel_width, pixel_height) = (screenshot.texture.width(), screenshot.texture.height());
 
-    let picture = gtk::Picture::for_paintable(&screenshot.texture);
-    picture.set_can_shrink(true);
-    // Kleine Bilder 1:1, große eingepasst – nie hochskalieren.
-    picture.set_content_fit(gtk::ContentFit::ScaleDown);
-    picture.add_css_class("porthole-preview");
+    // Startet eingepasst (kleine Bilder 1:1, nie hochskaliert); Zoom und Pan
+    // betreffen nur die Anzeige, nie `screenshot`.
+    let view = ZoomView::new(&screenshot.texture);
+    view.add_css_class("porthole-preview");
 
     let toasts = adw::ToastOverlay::new();
-    toasts.set_child(Some(&picture));
+    toasts.set_child(Some(&view));
 
     let actions_bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     actions_bar.add_css_class("toolbar");
@@ -51,6 +51,14 @@ pub fn present(app: &impl IsA<gtk::Application>, screenshot: Screenshot) {
         .css_classes(["dim-label", "numeric"])
         .build();
     actions_bar.append(&dimensions);
+    view.connect_zoom_changed(glib::clone!(
+        #[weak]
+        dimensions,
+        move |zoom| {
+            let percent = (zoom * 100.0).round();
+            dimensions.set_label(&format!("{pixel_width} × {pixel_height}  ·  {percent} %"));
+        }
+    ));
 
     let layout = adw::ToolbarView::new();
     layout.add_top_bar(&adw::HeaderBar::new());
@@ -66,11 +74,16 @@ pub fn present(app: &impl IsA<gtk::Application>, screenshot: Screenshot) {
         .default_height(height)
         .build();
 
-    install_actions(&window, &toasts, &screenshot);
+    install_actions(&window, &toasts, &view, &screenshot);
     window.present();
 }
 
-fn install_actions(window: &adw::Window, toasts: &adw::ToastOverlay, screenshot: &Rc<Screenshot>) {
+fn install_actions(
+    window: &adw::Window,
+    toasts: &adw::ToastOverlay,
+    view: &ZoomView,
+    screenshot: &Rc<Screenshot>,
+) {
     let copy = gio::ActionEntry::builder("copy")
         .activate(glib::clone!(
             #[weak]
@@ -133,8 +146,24 @@ fn install_actions(window: &adw::Window, toasts: &adw::ToastOverlay, screenshot:
         ))
         .build();
 
+    let zoom_fit = gio::ActionEntry::builder("zoom-fit")
+        .activate(glib::clone!(
+            #[weak]
+            view,
+            move |_: &gio::SimpleActionGroup, _, _| view.zoom_fit()
+        ))
+        .build();
+
+    let zoom_original = gio::ActionEntry::builder("zoom-original")
+        .activate(glib::clone!(
+            #[weak]
+            view,
+            move |_: &gio::SimpleActionGroup, _, _| view.zoom_original()
+        ))
+        .build();
+
     let group = gio::SimpleActionGroup::new();
-    group.add_action_entries([copy, save, delete]);
+    group.add_action_entries([copy, save, delete, zoom_fit, zoom_original]);
     window.insert_action_group("preview", Some(&group));
 
     let shortcuts = gtk::ShortcutController::new();
@@ -142,6 +171,8 @@ fn install_actions(window: &adw::Window, toasts: &adw::ToastOverlay, screenshot:
         ("<Control>c", "preview.copy"),
         ("<Control>s", "preview.save"),
         ("Delete", "preview.delete"),
+        ("<Control>0|<Control>KP_0", "preview.zoom-fit"),
+        ("<Control>1|<Control>KP_1", "preview.zoom-original"),
     ] {
         shortcuts.add_shortcut(gtk::Shortcut::new(
             gtk::ShortcutTrigger::parse_string(trigger),
