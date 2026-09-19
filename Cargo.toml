@@ -1,0 +1,44 @@
+[package]
+name = "porthole"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+description = "Schnelle Bereichs-Screenshots für GNOME/Wayland: aufnehmen, kopieren, speichern"
+publish = false
+
+[dependencies]
+gtk = { package = "gtk4", version = "0.10", features = ["v4_18"] }
+adw = { package = "libadwaita", version = "0.8", features = ["v1_7"] }
+# nur für Feature-Flags; die API kommt über gtk::gio
+gio = { version = "0.21", features = ["v2_80"] }
+# Kein tokio: zbus läuft auf seinem eigenen async-io-Thread, Futures werden
+# über den GLib-Mainloop gepollt.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "screenshot", "global_shortcuts"] }
+futures-util = { version = "0.3", default-features = false }
+ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
+
+[profile.dev]
+# hält target/ klein (wenig Plattenplatz)
+debug = "line-tables-only"
+
+[profile.release]
+lto = "thin"
+strip = true
+
+[package.metadata.deb]
+maintainer = "Porthole <porthole@localhost>"
+section = "utils"
+priority = "optional"
+depends = "$auto"
+extended-description = """\
+Kleines, vollständig lokales Screenshot-Werkzeug für GNOME unter Wayland: \
+Bereich aufziehen, Vorschau, in die Zwischenablage kopieren oder als PNG speichern. \
+Nutzt ausschließlich xdg-desktop-portal, kein X11/XWayland."""
+# .desktop- und Icon-Caches aktualisiert dpkg über die Trigger von
+# desktop-file-utils und hicolor-icon-theme – keine Maintainer-Skripte nötig.
+assets = [
+    ["target/release/porthole", "usr/bin/", "755"],
+    ["data/app.porthole.Porthole.desktop", "usr/share/applications/", "644"],
+    ["data/icons/hicolor/scalable/apps/app.porthole.Porthole.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["data/icons/hicolor/symbolic/apps/app.porthole.Porthole-symbolic.svg", "usr/share/icons/hicolor/symbolic/apps/", "644"],
+]

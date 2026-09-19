@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=Porthole
+GenericName=Screenshot Tool
+GenericName[de]=Bildschirmfoto-Werkzeug
+Comment=Capture, copy and save region screenshots
+Comment[de]=Bereichs-Screenshots aufnehmen, kopieren und speichern
+Exec=porthole
+Icon=app.porthole.Porthole
+Terminal=false
+Categories=Utility;
+Keywords=screenshot;bildschirmfoto;capture;snip;
+StartupNotify=true
+Actions=capture;
+
+[Desktop Action capture]
+Name=Take Screenshot
+Name[de]=Screenshot aufnehmen
+Exec=porthole --capture
