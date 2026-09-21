@@ -9,6 +9,7 @@ use crate::capture::portal_screenshot::PortalScreenshotBackend;
 use crate::capture::{permission, CaptureBackend, CaptureError};
 use crate::config;
 use crate::geometry::PixelRect;
+use crate::i18n::tr;
 use crate::monitors;
 use crate::screenshot::Screenshot;
 use crate::ui::{main_window, overlay, preview};
@@ -16,27 +17,23 @@ use crate::ui::{main_window, overlay, preview};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
     Idle,
-    /// Portal-Aufruf läuft. Liegt bewusst *vor* der Auswahl: erst wird der
-    /// Desktop eingefroren, dann darauf ausgewählt – so kann das Overlay nie
-    /// im Bild landen.
     Capturing,
     Selecting,
     Cropping,
 }
 
-/// Orchestriert einen Capture-Durchlauf. Auslöser, die während eines laufenden
-/// Durchlaufs eintreffen, werden verworfen (die Shell erlaubt ohnehin nur einen
-/// Screenshot gleichzeitig). Offene Previews sind kein Zustand des Controllers:
-/// sie leben unabhängig, beliebig viele parallel.
+/// Orchestrates a capture run. Triggers that arrive while a run is in progress
+/// are dropped (the shell only allows one screenshot at a time anyway). Open
+/// previews are not part of the controller's state: they live independently,
+/// any number of them in parallel.
 pub struct CaptureController {
     app: glib::WeakRef<adw::Application>,
     backend: PortalScreenshotBackend,
     state: Cell<State>,
-    /// Hauptfenster wurde für diesen Durchlauf versteckt und kommt danach zurück.
     restore_main_window: Cell<bool>,
 }
 
-/// So lange blendet GNOME ein Fenster aus; vorher wäre es noch im Bild.
+/// How long GNOME takes to hide a window; any earlier and it would still be in the shot.
 const HIDE_ANIMATION: Duration = Duration::from_millis(300);
 
 impl CaptureController {
@@ -49,13 +46,13 @@ impl CaptureController {
         })
     }
 
-    /// `hide_main_window`: Auslöser war der Button im eigenen Fenster. Bei
-    /// Tastenkürzel/Tray bleibt es stehen – das Verstecken kostet 300 ms.
+    /// `hide_main_window`: the trigger was the button in our own window. For
+    /// the shortcut/tray it stays put – hiding it costs 300 ms.
     pub fn request_capture(self: &Rc<Self>, hide_main_window: bool) {
         if self.state.get() != State::Idle {
             glib::g_message!(
                 config::LOG_DOMAIN,
-                "Capture ignoriert, Zustand ist {:?}",
+                "Capture ignored, state is {:?}",
                 self.state.get()
             );
             return;
@@ -63,8 +60,8 @@ impl CaptureController {
         self.state.set(State::Capturing);
         let this = self.clone();
         glib::MainContext::default().spawn_local(async move {
-            // Ohne erteilte Berechtigung muss das Fenster fokussiert bleiben,
-            // sonst darf GNOME den Erlaubnis-Dialog nicht zeigen.
+            // Without a granted permission the window must keep focus,
+            // otherwise GNOME isn't allowed to show the permission dialog.
             if hide_main_window
                 && permission::state().await == permission::State::Granted
                 && main_window::hide_for_capture()
@@ -100,7 +97,7 @@ impl CaptureController {
         };
         glib::g_message!(
             config::LOG_DOMAIN,
-            "Capture {}x{}: Portal {} ms, Laden {} ms, gesamt {} ms",
+            "Capture {}x{}: portal {} ms, loading {} ms, total {} ms",
             frame.texture.width(),
             frame.texture.height(),
             frame.portal_time.as_millis(),
@@ -111,7 +108,7 @@ impl CaptureController {
 
         let layout = monitors::query().await;
         if layout.is_none() {
-            glib::g_message!(config::LOG_DOMAIN, "Kein Mutter-Layout, nutze GDK-Geometrie");
+            glib::g_message!(config::LOG_DOMAIN, "No Mutter layout, using GDK geometry");
         }
 
         self.state.set(State::Selecting);
@@ -132,7 +129,7 @@ impl CaptureController {
         glib::MainContext::default().spawn_local(async move {
             let started = Instant::now();
             let screenshot = Screenshot::from_frame(&frame, rect).await;
-            // Der große Desktop-Frame wird ab hier nicht mehr gebraucht.
+            // The large desktop frame is no longer needed from here on.
             drop(frame);
             self.set_idle();
 
@@ -143,7 +140,7 @@ impl CaptureController {
                 Some(screenshot) => {
                     glib::g_message!(
                         config::LOG_DOMAIN,
-                        "Ausschnitt {}x{} @ ({}, {}): Zuschnitt + PNG {} ms, {} KiB",
+                        "Region {}x{} @ ({}, {}): crop + PNG {} ms, {} KiB",
                         rect.width,
                         rect.height,
                         rect.x,
@@ -155,7 +152,7 @@ impl CaptureController {
                 }
                 None => report_error(
                     &app,
-                    &CaptureError::Failed("Ausschnitt konnte nicht erzeugt werden".into()),
+                    &CaptureError::Failed(tr("The region could not be created").into()),
                 ),
             }
         });

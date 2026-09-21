@@ -1,0 +1,73 @@
+# German translations for Porthole.
+#
+# The msgid is the English text from the code; it must match exactly.
+# Placeholders like {detail} are filled in by the code and must stay unchanged.
+msgid ""
+msgstr ""
+"Project-Id-Version: porthole\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/app.rs
+msgid ""
+"Usage: porthole [OPTION]\n"
+"  (no option)          Show the window\n"
+"  --capture            Take a region screenshot\n"
+"  --background         Start in the background only, no window\n"
+"  --reset-permission   Delete the stored screenshot permission (you will be asked again)\n"
+msgstr ""
+"Aufruf: porthole [OPTION]\n"
+"  (ohne Option)        Fenster anzeigen\n"
+"  --capture            Bereichs-Screenshot starten\n"
+"  --background         Nur im Hintergrund starten, kein Fenster\n"
+"  --reset-permission   Gespeicherte Screenshot-Berechtigung löschen (es wird neu gefragt)\n"
+
+#: src/capture/mod.rs
+msgid ""
+"Porthole isn't allowed to take screenshots. Reset the permission with: "
+"porthole --reset-permission"
+msgstr ""
+"Porthole darf keine Screenshots aufnehmen. Berechtigung zurücksetzen mit: "
+"porthole --reset-permission"
+
+#: src/capture/mod.rs
+msgid ""
+"One-time approval needed: please click the camera button here and choose "
+"“Allow”. After that the shortcut works from anywhere."
+msgstr ""
+"Einmalige Freigabe nötig: Bitte hier auf den Kamera-Button klicken und "
+"„Erlauben“ wählen. Danach funktioniert das Tastenkürzel von überall."
+
+#: src/capture/mod.rs
+msgid "Capture cancelled."
+msgstr "Aufnahme abgebrochen."
+
+#: src/capture/mod.rs
+msgid "Screenshot portal not available: {detail}"
+msgstr "Screenshot-Portal nicht verfügbar: {detail}"
+
+#: src/capture/mod.rs
+msgid "The screenshot portal didn't respond in time."
+msgstr "Das Screenshot-Portal hat nicht rechtzeitig geantwortet."
+
+#: src/capture/mod.rs
+msgid "Screenshot could not be loaded: {detail}"
+msgstr "Screenshot konnte nicht geladen werden: {detail}"
+
+#: src/capture/mod.rs
+msgid "Capture failed: {detail}"
+msgstr "Aufnahme fehlgeschlagen: {detail}"
+
+#: src/capture/portal_screenshot.rs
+msgid "The portal reported an error (Response 2)"
+msgstr "Portal meldet einen Fehler (Response 2)"
+
+#: src/controller.rs
+msgid "The region could not be created"
+msgstr "Ausschnitt konnte nicht erzeugt werden"
+
+#: src/ui/overlay.rs
+msgid "Monitor layout doesn't match the screenshot: {error}"
+msgstr "Monitor-Layout passt nicht zum Screenshot: {error}"

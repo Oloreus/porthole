@@ -3,22 +3,22 @@ name = "porthole"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.87"
-description = "Schnelle Bereichs-Screenshots für GNOME/Wayland: aufnehmen, kopieren, speichern"
+description = "Fast region screenshots for GNOME/Wayland: capture, copy, save"
 publish = false
 
 [dependencies]
 gtk = { package = "gtk4", version = "0.10", features = ["v4_14"] }
 adw = { package = "libadwaita", version = "0.8", features = ["v1_5"] }
-# nur für Feature-Flags; die API kommt über gtk::gio
+# only for feature flags; the API comes via gtk::gio
 gio = { version = "0.21", features = ["v2_80"] }
-# Kein tokio: zbus läuft auf seinem eigenen async-io-Thread, Futures werden
-# über den GLib-Mainloop gepollt.
+# No tokio: zbus runs on its own async-io thread, futures are polled
+# via the GLib main loop.
 ashpd = { version = "0.13", default-features = false, features = ["async-io", "screenshot", "global_shortcuts"] }
 futures-util = { version = "0.3", default-features = false }
 ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
 
 [profile.dev]
-# hält target/ klein (wenig Plattenplatz)
+# keeps target/ small (low disk space)
 debug = "line-tables-only"
 
 [profile.release]
@@ -30,16 +30,16 @@ maintainer = "Porthole <porthole@localhost>"
 section = "utils"
 priority = "optional"
 depends = "$auto"
-# Porthole selbst braucht sie nicht: Terminal-Programme wie Claude Code lesen
-# Bilder aus der Zwischenablage über wl-paste (Wayland) bzw. xclip (X11).
-# Recommends statt Depends – apt installiert sie standardmäßig mit.
+# Porthole itself doesn't need them: terminal programs like Claude Code read
+# images from the clipboard via wl-paste (Wayland) or xclip (X11).
+# Recommends instead of Depends – apt installs them by default anyway.
 recommends = "wl-clipboard, xclip"
 extended-description = """\
-Kleines, vollständig lokales Screenshot-Werkzeug für GNOME unter Wayland: \
-Bereich aufziehen, Vorschau, in die Zwischenablage kopieren oder als PNG speichern. \
-Nutzt ausschließlich xdg-desktop-portal, kein X11/XWayland."""
-# .desktop- und Icon-Caches aktualisiert dpkg über die Trigger von
-# desktop-file-utils und hicolor-icon-theme – keine Maintainer-Skripte nötig.
+Small, fully local screenshot tool for GNOME on Wayland: \
+select a region, preview it, copy it to the clipboard or save it as PNG. \
+Uses xdg-desktop-portal exclusively, no X11/XWayland."""
+# dpkg updates the .desktop and icon caches via the triggers of
+# desktop-file-utils and hicolor-icon-theme – no maintainer scripts needed.
 assets = [
     ["target/release/porthole", "usr/bin/", "755"],
     ["data/app.porthole.Porthole.desktop", "usr/share/applications/", "644"],

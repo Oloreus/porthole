@@ -1,5 +1,5 @@
-//! Screenshot-Capture, strikt getrennt von der UI: Backends liefern ein Bild
-//! des gesamten Desktops, Auswahl und Zuschnitt passieren danach lokal.
+//! Screenshot capture, strictly separated from the UI: backends deliver an
+//! image of the whole desktop; selection and cropping then happen locally.
 
 pub mod permission;
 pub mod portal_screenshot;
@@ -9,22 +9,24 @@ use std::time::Duration;
 
 use gtk::gdk;
 
-/// Bild des gesamten Desktops (alle Monitore, ein Bild) plus Messwerte.
+use crate::i18n::tr;
+
+/// Image of the whole desktop (all monitors, one image) plus timings.
 pub struct DesktopFrame {
     pub texture: gdk::Texture,
-    /// Dauer des Portal-Aufrufs bis zur Antwort.
+    /// Time from the portal call to its response.
     pub portal_time: Duration,
-    /// Dauer fürs Laden/Dekodieren des Bildes.
+    /// Time spent loading/decoding the image.
     pub load_time: Duration,
 }
 
 #[derive(Debug)]
 pub enum CaptureError {
-    /// Der Nutzer hat Porthole das Aufnehmen verboten. XDP fragt danach nie
-    /// wieder von selbst – nur `permission::reset` hebt das auf.
+    /// The user denied Porthole permission to capture. XDP never asks again by
+    /// itself afterwards – only `permission::reset` undoes this.
     PermissionDenied,
-    /// Noch keine Berechtigung, und der Erlaubnis-Dialog durfte nicht
-    /// erscheinen, weil kein Porthole-Fenster fokussiert war.
+    /// No permission yet, and the permission dialog wasn't allowed to appear
+    /// because no Porthole window had focus.
     PermissionNeedsFocus,
     Cancelled,
     PortalUnavailable(String),
@@ -35,25 +37,23 @@ pub enum CaptureError {
 
 impl fmt::Display for CaptureError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::PermissionDenied => write!(
-                f,
-                "Porthole darf keine Screenshots aufnehmen. Berechtigung zurücksetzen mit: \
-                 porthole --reset-permission"
-            ),
-            Self::PermissionNeedsFocus => write!(
-                f,
-                "Einmalige Freigabe nötig: Bitte hier auf den Kamera-Button klicken und \
-                 „Erlauben“ wählen. Danach funktioniert das Tastenkürzel von überall."
-            ),
-            Self::Cancelled => write!(f, "Aufnahme abgebrochen."),
+        let with_detail = |msgid, detail: &str| tr(msgid).replace("{detail}", detail);
+        let message = match self {
+            Self::PermissionDenied => tr("Porthole isn't allowed to take screenshots. \
+                 Reset the permission with: porthole --reset-permission")
+            .to_owned(),
+            Self::PermissionNeedsFocus => tr("One-time approval needed: please click the camera \
+                 button here and choose “Allow”. After that the shortcut works from anywhere.")
+            .to_owned(),
+            Self::Cancelled => tr("Capture cancelled.").to_owned(),
             Self::PortalUnavailable(detail) => {
-                write!(f, "Screenshot-Portal nicht verfügbar: {detail}")
+                with_detail("Screenshot portal not available: {detail}", detail)
             }
-            Self::Timeout => write!(f, "Das Screenshot-Portal hat nicht rechtzeitig geantwortet."),
-            Self::Load(detail) => write!(f, "Screenshot konnte nicht geladen werden: {detail}"),
-            Self::Failed(detail) => write!(f, "Aufnahme fehlgeschlagen: {detail}"),
-        }
+            Self::Timeout => tr("The screenshot portal didn't respond in time.").to_owned(),
+            Self::Load(detail) => with_detail("Screenshot could not be loaded: {detail}", detail),
+            Self::Failed(detail) => with_detail("Capture failed: {detail}", detail),
+        };
+        f.write_str(&message)
     }
 }
 

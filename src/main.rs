@@ -3,6 +3,7 @@ mod capture;
 mod config;
 mod controller;
 mod geometry;
+mod i18n;
 mod monitors;
 mod portal;
 mod scope;

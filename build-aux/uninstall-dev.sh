@@ -3,8 +3,8 @@ set -euo pipefail
 
 APP_ID=app.porthole.Porthole
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
-# Terminals in Snap-Apps (z. B. VS Code) biegen XDG_DATA_HOME nach ~/snap/…
-# um; dort sieht die GNOME Shell die .desktop-Datei nie.
+# Terminals in Snap apps (e.g. VS Code) redirect XDG_DATA_HOME to ~/snap/…;
+# GNOME Shell never sees the .desktop file there.
 case "$DATA" in "$HOME"/snap/*) DATA="$HOME/.local/share" ;; esac
 
 rm -f "$DATA/applications/$APP_ID.desktop" \
@@ -13,4 +13,7 @@ rm -f "$DATA/applications/$APP_ID.desktop" \
 rm -f "$DATA/icons/hicolor/icon-theme.cache"
 update-desktop-database "$DATA/applications" 2>/dev/null || true
 
-echo "Entfernt."
+case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
+  de*) echo "Entfernt." ;;
+  *) echo "Removed." ;;
+esac

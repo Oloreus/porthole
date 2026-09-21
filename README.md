@@ -1,94 +1,102 @@
 # Porthole
 
-Schnelle Bereichs-Screenshots für Ubuntu/GNOME unter Wayland: aufnehmen → Vorschau → kopieren / speichern / löschen. Vollständig lokal, kein X11/XWayland, keine Cloud.
+Fast region screenshots for Ubuntu/GNOME on Wayland: capture → preview → copy / save / delete. Fully local, no X11/XWayland, no cloud.
 
-## Bedienung
+## Usage
 
-| Aktion | Wie |
+The app's interface is currently German only; button and menu labels are quoted as they appear, with their meaning in brackets.
+
+| Action | How |
 |---|---|
-| Screenshot starten | `Alt+S` (global, ab GNOME 48 – [Ubuntu 24.04](#ubuntu-2404-gnome-46)) · Tray-Menü · Kamera-Button im Porthole-Fenster · `porthole --capture` |
-| Bereich wählen | Mit gedrückter linker Maustaste aufziehen, Loslassen nimmt auf |
-| Abbrechen | `ESC` oder Rechtsklick |
-| Kopieren (als Bild) | `Strg+C` oder „Kopieren" im Vorschaufenster |
-| Speichern (PNG) | `Strg+S` oder „Speichern" |
-| Verwerfen | `Entf`, „Löschen" oder Fenster schließen – ohne Rückfrage |
-| Vorschau zoomen | `Strg+Mausrad` (am Mauszeiger verankert, 10 % bis 500 %) · Doppelklick: eingepasst ↔ 100 % |
-| Ausschnitt verschieben | Bild mit linker Maustaste ziehen · Mausrad (mit `Umschalt` horizontal) |
-| Einpassen / 100 % | `Strg+0` / `Strg+1` |
+| Take a screenshot | `Alt+S` (global, GNOME 48 and later – [Ubuntu 24.04](#ubuntu-2404-gnome-46)) · tray menu · camera button in the Porthole window · `porthole --capture` |
+| Select a region | Drag with the left mouse button held down; releasing captures |
+| Cancel | `Esc` or right-click |
+| Copy (as image) | `Ctrl+C` or "Kopieren" (Copy) in the preview window |
+| Save (PNG) | `Ctrl+S` or "Speichern" (Save) |
+| Discard | `Delete`, "Löschen" (Delete) or close the window – no confirmation |
+| Zoom the preview | `Ctrl+mouse wheel` (anchored at the pointer, 10 % to 500 %) · double-click: fit ↔ 100 % |
+| Pan the view | Drag the image with the left mouse button · mouse wheel (with `Shift` for horizontal) |
+| Fit / 100 % | `Ctrl+0` / `Ctrl+1` |
 
-Zoom betrifft nur die Anzeige: Kopieren und Speichern liefern immer das Original in voller Auflösung. 100 % heißt ein Bildpixel je Bildschirmpixel.
+Zoom only affects the display: copy and save always deliver the original at full resolution. 100 % means one image pixel per screen pixel.
 
-Jeder Screenshot bekommt ein eigenes Vorschaufenster; die Fenster sind der Zwischenspeicher (nur im RAM, keine temporären Dateien). Das Tastenkürzel lässt sich ab GNOME 48 unter **Einstellungen → Apps → Porthole → Globale Tastenkürzel** ändern. Autostart: Tray-Menü → „Beim Anmelden starten".
+Every screenshot gets its own preview window; the windows are the buffer (RAM only, no temporary files). From GNOME 48 on, the shortcut can be changed under **Settings → Apps → Porthole → Global Shortcuts**. Autostart: tray menu → "Beim Anmelden starten" (Start at login).
 
 ## Installation
 
-Unterstützt: Ubuntu 24.04 LTS und neuer (GTK ≥ 4.14, libadwaita ≥ 1.5).
+Supported: Ubuntu 24.04 LTS and newer (GTK ≥ 4.14, libadwaita ≥ 1.5).
 
 ```bash
-cargo deb                                   # baut target/debian/porthole_*.deb
+cargo deb                                   # builds target/debian/porthole_*.deb
 sudo apt install ./target/debian/porthole_*.deb
 ```
 
-Das `.deb` auf der ältesten Zielversion bauen (Ubuntu 24.04): Die Paketabhängigkeiten werden aus den Bibliotheksversionen der Build-Maschine abgeleitet – ein auf 25.04+ gebautes Paket lässt sich auf 24.04 nicht installieren. Umgekehrt läuft ein 24.04-Paket auch auf neueren Versionen.
+Build the `.deb` on the oldest target release (Ubuntu 24.04): the package dependencies are derived from the library versions on the build machine – a package built on 25.04+ can't be installed on 24.04. The other way round, a 24.04 package also runs on newer releases.
 
-Das Paket empfiehlt `wl-clipboard` und `xclip`: Terminal-Programme (z. B. Claude Code) lesen kopierte Screenshots nur über `wl-paste`/`xclip` aus der Zwischenablage, und Ubuntu bringt beide nicht mit. `apt install` zieht sie automatisch mit, `dpkg -i` nicht.
+The package recommends `wl-clipboard` and `xclip`: terminal programs (e.g. Claude Code) read copied screenshots from the clipboard only via `wl-paste`/`xclip`, and Ubuntu ships neither. `apt install` pulls them in automatically, `dpkg -i` doesn't.
 
-Beim **ersten** Screenshot fragt GNOME einmalig um Erlaubnis. Dieser Dialog erscheint nur, wenn ein Porthole-Fenster den Fokus hat – deshalb den ersten Screenshot über den Kamera-Button im Porthole-Fenster auslösen (die App weist darauf hin). Danach funktioniert alles aus dem Hintergrund.
+On the **first** screenshot, GNOME asks for permission once. This dialog only appears while a Porthole window has focus – so trigger the first screenshot with the camera button in the Porthole window (the app points this out). After that, everything works from the background.
 
-## Entwickeln
+## Development
 
-Voraussetzungen (Ubuntu 24.04+):
+Prerequisites (Ubuntu 24.04+):
 
 ```bash
 sudo apt install rustup libgtk-4-dev libadwaita-1-dev pkg-config
 rustup default stable && rustup component add clippy
-cargo install cargo-deb --locked           # nur fürs Paketieren
+cargo install cargo-deb --locked           # only for packaging
 ```
 
 ```bash
 cargo build
-build-aux/install-dev.sh    # einmalig: .desktop + Icons nach ~/.local/share (zeigt auf target/debug)
-cargo run -- --background   # Hintergrundinstanz; weitere Aufrufe sprechen mit ihr
+build-aux/install-dev.sh    # once: .desktop + icons into ~/.local/share (points to target/debug)
+cargo run -- --background   # background instance; further invocations talk to it
 cargo run -- --capture
 cargo test && cargo clippy -- -D warnings
 ```
 
-**Terminal einer Snap-App (z. B. VS Code):** Alles, was von dort startet, läuft im Scope der Snap-App (`snap.code.code-….scope`). Das Portal hielte Porthole dann für VS Code, die Shell ordnete die Fenster keiner App zu (kein Dock-Eintrag), und der Freigabedialog würde verweigert („Only the focused app is allowed to show a system access dialog“ in `journalctl --user`). Porthole erkennt das beim Start und startet sich per `systemd-run --user` als eigene Unit `app-app.porthole.Porthole@<pid>` neu (`src/scope.rs`); mit Terminal über `--pty`, sodass Log und Strg+C wie gewohnt funktionieren. `cargo run` geht damit auch aus VS Code.
+**Terminal of a Snap app (e.g. VS Code):** Everything started from there runs in the Snap app's scope (`snap.code.code-….scope`). The portal would then take Porthole for VS Code, the shell wouldn't associate the windows with any app (no dock entry), and the permission dialog would be refused ("Only the focused app is allowed to show a system access dialog" in `journalctl --user`). Porthole detects this at startup and relaunches itself via `systemd-run --user` as its own unit `app-app.porthole.Porthole@<pid>` (`src/scope.rs`); with a terminal attached it uses `--pty`, so the log and Ctrl+C work as usual. This makes `cargo run` work from VS Code too.
 
-Der Unit-Name ist nicht beliebig: Ohne Portal-Registry (xdg-desktop-portal < 1.20, also Ubuntu 24.04) leitet das Portal die App-ID aus ihm ab (`app-<App-ID>@….service`). Bei jedem anderen Namen ist die App-ID leer – eine erteilte Screenshot-Freigabe gälte dann für *alle* nicht zuordenbaren Programme. Prüfen und ggf. entfernen:
+The unit name isn't arbitrary: without the portal registry (xdg-desktop-portal < 1.20, i.e. Ubuntu 24.04) the portal derives the app ID from it (`app-<app ID>@….service`). With any other name the app ID is empty – a granted screenshot permission would then apply to *all* unidentifiable programs. To check and, if necessary, remove it:
 
 ```bash
 gdbus call --session -d org.freedesktop.impl.portal.PermissionStore -o /org/freedesktop/impl/portal/PermissionStore \
-  -m org.freedesktop.impl.portal.PermissionStore.Lookup screenshot screenshot            # Eintrag '' darf nicht auftauchen
+  -m org.freedesktop.impl.portal.PermissionStore.Lookup screenshot screenshot            # entry '' must not appear
 gdbus call --session -d org.freedesktop.impl.portal.PermissionStore -o /org/freedesktop/impl/portal/PermissionStore \
   -m org.freedesktop.impl.portal.PermissionStore.DeletePermission screenshot screenshot ''
 ```
 
-Porthole ist Single-Instance: Läuft schon eine Instanz, landen alle weiteren Starts (`cargo run`, App-Menü, `--capture`) bei ihr – nach einem neuen Build die alte vorher beenden (Tray → Beenden).
+Porthole is single-instance: if an instance is already running, all further launches (`cargo run`, app menu, `--capture`) go to it – after a new build, quit the old one first (tray → "Beenden" (Quit)).
 
-Ein eigenes Tastenkürzel (Ubuntu 24.04) braucht während der Entwicklung den vollen Pfad als Befehl, z. B. `/pfad/zu/porthole/target/debug/porthole --capture` – `porthole` liegt erst nach Installation des `.deb` im `$PATH`.
+During development, a custom shortcut (Ubuntu 24.04) needs the full path as its command, e.g. `/path/to/porthole/target/debug/porthole --capture` – `porthole` is only in `$PATH` after installing the `.deb`.
 
-Die installierte `.desktop`-Datei ist Pflicht: nur damit akzeptiert das xdg-desktop-portal die App-ID `app.porthole.Porthole`, an der Screenshot-Berechtigung und globales Tastenkürzel hängen. Vor der Installation des `.deb` den Dev-Eintrag mit `build-aux/uninstall-dev.sh` entfernen (er überdeckt sonst den Systemeintrag).
+The installed `.desktop` file is mandatory: only with it does xdg-desktop-portal accept the app ID `app.porthole.Porthole`, which the screenshot permission and the global shortcut are tied to. Before installing the `.deb`, remove the dev entry with `build-aux/uninstall-dev.sh` (otherwise it shadows the system entry).
 
-## Architektur in Kürze
+### Translations
 
-- **Freeze-Frame:** Erst nimmt das Screenshot-Portal den ganzen Desktop auf, dann zeigt Porthole ihn je Monitor als Vollbild-Standbild mit Abdunklung und schneidet lokal zu. Das Overlay kann so nie im Bild landen. (Ein Wayland-Client kann weder „durch sich hindurch" sehen noch Fenster frei platzieren.)
-- `capture/` – Backends hinter `trait CaptureBackend`, UI-frei. Aktuell `PortalScreenshotBackend`.
-- `geometry.rs`, `monitors.rs` – Koordinatenräume Stage ↔ Bild ↔ Fenster, rein verhältnisbasiert; Layout direkt von Mutter. Unit-getestet inkl. Mehrschirm/Mixed-DPI.
-- `viewport.rs` – Zoom-/Pan-Zustand der Vorschau (Einpassen vs. manueller Zoom, zeigerverankerter Zoom, Pan-Grenzen), GTK-frei und unit-getestet. `ui/zoom_view.rs` zeichnet damit die unveränderte Textur; skaliert wird je Frame auf der GPU.
-- `controller.rs` – Zustandsautomat `Idle → Capturing → Selecting → Cropping → Idle`.
-- `ui/` – Auswahl-Overlay, Vorschaufenster, kleines Hauptfenster. `services/` – Zwischenablage, Speichern, Tastenkürzel, Tray, Autostart.
+Texts in the code are English and go through `tr("…")` (`src/i18n.rs`). `po/de.po` holds the German translations in gettext format and is compiled into the binary – nothing to install. The language follows `LC_ALL`, then `LC_MESSAGES`, then `LANG`; anything other than German falls back to English. When adding or changing a text, add or update its entry in `po/de.po`: the `msgid` must match the English text exactly, and placeholders like `{detail}` must be kept. For another language, add `po/<lang>.po` and register it in `CATALOGS` in `src/i18n.rs`.
+
+Not everything is translated yet: buttons, tray menu and notifications (other than capture errors) are still hardcoded German.
+
+## Architecture in brief
+
+- **Freeze frame:** First the screenshot portal captures the whole desktop, then Porthole shows it per monitor as a dimmed full-screen still image and crops locally. This way the overlay can never end up in the picture. (A Wayland client can neither see "through itself" nor position windows freely.)
+- `capture/` – backends behind `trait CaptureBackend`, UI-free. Currently `PortalScreenshotBackend`.
+- `geometry.rs`, `monitors.rs` – coordinate spaces stage ↔ image ↔ window, purely ratio-based; layout straight from Mutter. Unit-tested including multi-monitor/mixed DPI.
+- `viewport.rs` – zoom/pan state of the preview (fit vs. manual zoom, pointer-anchored zoom, pan limits), GTK-free and unit-tested. `ui/zoom_view.rs` uses it to draw the unmodified texture; scaling happens per frame on the GPU.
+- `controller.rs` – state machine `Idle → Capturing → Selecting → Cropping → Idle`.
+- `ui/` – selection overlay, preview window, small main window. `services/` – clipboard, saving, shortcuts, tray, autostart.
 
 ## Ubuntu 24.04 (GNOME 46)
 
-- **Kein globales Tastenkürzel über das Portal:** Das GlobalShortcuts-Backend gibt es erst ab GNOME 48. Porthole erkennt das und zeigt beim ersten Start einmalig einen Hinweis mit Button zu den Tastatureinstellungen. Dort unter **Tastatur → Tastenkürzel anzeigen und anpassen → Eigene Tastenkürzel** ein Kürzel mit dem Befehl `porthole --capture` anlegen (z. B. `Alt+S`). Der Menüpunkt „Einstellungen → Apps → Globale Tastenkürzel“ existiert in GNOME 46 nicht.
-- Tray-Icon, Screenshot-Portal und alles andere funktionieren wie unter GNOME 48 (Ubuntu liefert die AppIndicator-Erweiterung aktiviert mit).
-- Nach einem Upgrade auf GNOME 48+ meldet Porthole das Portal-Kürzel automatisch an; das eigene Kürzel dann wieder entfernen, sonst sind beide belegt.
+- **No global shortcut via the portal:** the GlobalShortcuts backend only exists from GNOME 48 on. Porthole detects this and, on first launch, shows a one-time notice with a button to the keyboard settings. There, under **Keyboard → View and Customize Shortcuts → Custom Shortcuts**, add a shortcut with the command `porthole --capture` (e.g. `Alt+S`). The menu entry "Settings → Apps → Global Shortcuts" doesn't exist in GNOME 46.
+- The tray icon, screenshot portal and everything else work as on GNOME 48 (Ubuntu ships the AppIndicator extension enabled).
+- After upgrading to GNOME 48+, Porthole registers the portal shortcut automatically; remove the custom shortcut then, otherwise both are bound.
 
-## Bekannte Eigenheiten (GNOME 48)
+## Known quirks (GNOME 48)
 
-- **~0,6 s bis zum Auswahlmodus, weißer Blitz + Auslöser-Ton:** Das GNOME-Portal-Backend erzwingt beides (wartet die 500-ms-Blitzanimation ab). Ton systemweit abschaltbar: `gsettings set org.gnome.desktop.sound event-sounds false`.
-- **„BindShortcuts meldet Other" im Log:** `xdg-desktop-portal-gnome` 48.0 antwortet mit Fehlercode, obwohl das Kürzel gebunden ist; Porthole lauscht deshalb trotzdem.
-- **Berechtigung versehentlich verweigert:** `porthole --reset-permission`, dann erneut über den Kamera-Button auslösen.
-- **Falls das globale Kürzel ausfällt:** Wie unter [Ubuntu 24.04](#ubuntu-2404-gnome-46) in Einstellungen → Tastatur ein eigenes Tastenkürzel mit dem Befehl `porthole --capture` anlegen.
-- Auswahl über Monitorgrenzen hinweg wird nicht unterstützt (Auswahl bleibt auf dem Monitor, auf dem sie begann). Mehrschirm-Betrieb ist berechnet und unit-getestet, aber noch nicht auf echter Hardware geprüft.
+- **~0.6 s until selection mode, white flash + shutter sound:** the GNOME portal backend enforces both (it waits for the 500 ms flash animation). The sound can be turned off system-wide: `gsettings set org.gnome.desktop.sound event-sounds false`.
+- **"BindShortcuts meldet …" in the log** (BindShortcuts reports "Other"): `xdg-desktop-portal-gnome` 48.0 responds with an error code even though the shortcut is bound; Porthole therefore listens anyway.
+- **Permission denied by accident:** `porthole --reset-permission`, then trigger again via the camera button.
+- **If the global shortcut fails:** as under [Ubuntu 24.04](#ubuntu-2404-gnome-46), add a custom shortcut with the command `porthole --capture` in Settings → Keyboard.
+- Selecting across monitor boundaries isn't supported (the selection stays on the monitor where it started). Multi-monitor operation is calculated and unit-tested, but not yet verified on real hardware.

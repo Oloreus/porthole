@@ -1,6 +1,6 @@
-//! Einzige Stelle für App-Identität. Die ID muss zum Dateinamen der
-//! installierten `.desktop`-Datei passen, sonst lehnt das Portal die
-//! Registrierung ab (und damit Screenshot-Permission und globale Shortcuts).
+//! Single source of the app's identity. The ID must match the file name of the
+//! installed `.desktop` file, otherwise the portal rejects the registration
+//! (and with it the screenshot permission and global shortcuts).
 
 pub const APP_ID: &str = "app.porthole.Porthole";
 pub const APP_NAME: &str = "Porthole";

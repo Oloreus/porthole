@@ -6,6 +6,7 @@ use gtk::{gdk, glib};
 
 use super::selection_area::SelectionArea;
 use crate::geometry::{self, PixelRect, Rect};
+use crate::i18n::tr;
 use crate::monitors::StageLayout;
 use crate::screenshot;
 
@@ -85,7 +86,10 @@ pub fn present(
         })
         .collect();
     let regions = geometry::monitor_regions(&stage_rects, (frame.width(), frame.height()))
-        .map_err(|err| format!("Monitor-Layout passt nicht zum Screenshot: {err:?}"))?;
+        .map_err(|err| {
+            tr("Monitor layout doesn't match the screenshot: {error}")
+                .replace("{error}", &format!("{err:?}"))
+        })?;
 
     let session = Rc::new(Session {
         windows: RefCell::new(Vec::new()),

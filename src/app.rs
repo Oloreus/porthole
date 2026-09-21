@@ -4,23 +4,23 @@ use gtk::{gio, glib};
 use crate::capture::permission;
 use crate::controller::CaptureController;
 use crate::services::{shortcuts, tray};
-use crate::{config, portal, ui};
+use crate::{config, i18n, portal, ui};
 
 const USAGE: &str = "\
-Aufruf: porthole [OPTION]
-  (ohne Option)        Fenster anzeigen
-  --capture            Bereichs-Screenshot starten
-  --background         Nur im Hintergrund starten, kein Fenster
-  --reset-permission   Gespeicherte Screenshot-Berechtigung löschen (es wird neu gefragt)
+Usage: porthole [OPTION]
+  (no option)          Show the window
+  --capture            Take a region screenshot
+  --background         Start in the background only, no window
+  --reset-permission   Delete the stored screenshot permission (you will be asked again)
 ";
 
-/// Single-Instance-Anwendung. Jeder weitere Aufruf (auch `porthole --capture`
-/// aus einem Desktop-Tastenkürzel) landet per D-Bus in `on_command_line` der
-/// laufenden Instanz; alle Auslöser münden in die Action `app.capture`.
+/// Single-instance application. Every further invocation (including
+/// `porthole --capture` from a desktop shortcut) reaches `on_command_line` of
+/// the running instance via D-Bus; all triggers end up in the `app.capture` action.
 pub fn build() -> adw::Application {
     let app = adw::Application::builder()
         .application_id(config::APP_ID)
-        .flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE)
+        .flags(gio::ApplicationFlags::HANDLES_COMMAND_LINE | gio::ApplicationFlags::SEND_ENVIRONMENT)
         .build();
 
     app.connect_startup(on_startup);
@@ -30,11 +30,11 @@ pub fn build() -> adw::Application {
 }
 
 fn on_startup(app: &adw::Application) {
-    // Läuft ohne Fenster im Hintergrund weiter, bis `app.quit`.
+    // Keeps running in the background without a window until `app.quit`.
     std::mem::forget(app.hold());
 
-    // Die Registrierung muss vor jedem anderen Portal-Aufruf durch sein,
-    // sonst gilt die App-ID als leer und BindShortcuts scheitert.
+    // Registration must finish before any other portal call, otherwise the
+    // app ID counts as empty and BindShortcuts fails.
     glib::MainContext::default().spawn_local(glib::clone!(
         #[strong]
         app,
@@ -54,7 +54,7 @@ fn on_startup(app: &adw::Application) {
             move |_: &adw::Application, _, _| controller.request_capture(false)
         ))
         .build();
-    // Vom Kamera-Button des eigenen Fensters: Fenster vorher aus dem Bild nehmen.
+    // From the camera button in our own window: get the window out of the shot first.
     let capture_from_window = gio::ActionEntry::builder("capture-from-window")
         .activate(move |_: &adw::Application, _, _| controller.request_capture(true))
         .build();
@@ -65,14 +65,8 @@ fn on_startup(app: &adw::Application) {
         .activate(|_: &adw::Application, _, _| {
             glib::MainContext::default().spawn_local(async {
                 match permission::reset().await {
-                    Ok(()) => glib::g_message!(
-                        config::LOG_DOMAIN,
-                        "Screenshot-Berechtigung zurückgesetzt"
-                    ),
-                    Err(err) => glib::g_warning!(
-                        config::LOG_DOMAIN,
-                        "Zurücksetzen fehlgeschlagen: {err}"
-                    ),
+                    Ok(()) => glib::g_message!(config::LOG_DOMAIN, "Screenshot permission reset"),
+                    Err(err) => glib::g_warning!(config::LOG_DOMAIN, "Reset failed: {err}"),
                 }
             });
         })
@@ -105,16 +99,26 @@ fn on_command_line(app: &adw::Application, cmdline: &gio::ApplicationCommandLine
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
 
+    let usage = usage_text(cmdline);
     match args.as_slice() {
         [] => app.activate(),
         [flag] if flag == "--capture" => app.activate_action("capture", None),
         [flag] if flag == "--reset-permission" => app.activate_action("reset-permission", None),
         [flag] if flag == "--background" => {}
-        [flag] if flag == "--help" || flag == "-h" => cmdline.print_literal(USAGE),
+        [flag] if flag == "--help" || flag == "-h" => cmdline.print_literal(&usage),
         _ => {
-            cmdline.printerr_literal(USAGE);
+            cmdline.printerr_literal(&usage);
             return glib::ExitCode::FAILURE;
         }
     }
     glib::ExitCode::SUCCESS
+}
+
+/// Usage text in the caller's language. The running instance may have been
+/// started with a different locale, so read it from the calling process.
+fn usage_text(cmdline: &gio::ApplicationCommandLine) -> String {
+    match i18n::locale_from(|var| cmdline.getenv(var).map(String::from)) {
+        Some(locale) => i18n::tr_for(&locale, USAGE),
+        None => USAGE.to_owned(),
+    }
 }

@@ -39,6 +39,15 @@ pub fn relaunch_if_in_snap_scope() -> Option<glib::ExitCode> {
         .args(["--user", "--quiet", "--collect"])
         .arg(format!("--unit=app-{}@{}", config::APP_ID, std::process::id()))
         .arg(format!("--setenv={GUARD_VAR}=1"));
+    // The new unit gets the session's environment, not the terminal's; keep
+    // the terminal's language so messages match the caller's locale.
+    for var in ["LANG", "LANGUAGE", "LC_ALL", "LC_MESSAGES"] {
+        if let Some(value) = env::var_os(var) {
+            let mut setenv = std::ffi::OsString::from(format!("--setenv={var}="));
+            setenv.push(value);
+            command.arg(setenv);
+        }
+    }
     // Mit Terminal: --pty reicht Strg+C an Porthole durch. Ohne Terminal
     // bliebe Porthole nach Strg+C auf systemd-run weiterlaufen.
     if std::io::stdin().is_terminal() {

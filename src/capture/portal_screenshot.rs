@@ -7,6 +7,7 @@ use gtk::{gdk, gio, glib};
 
 use super::{permission, CaptureBackend, CaptureError, DesktopFrame};
 use crate::config;
+use crate::i18n::tr;
 
 /// Großzügig, weil beim allerersten Aufruf der Erlaubnis-Dialog offen ist.
 const PORTAL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -69,7 +70,7 @@ async fn map_error(err: ashpd::Error) -> CaptureError {
             // lässt ihn nur zu, wenn ein Fenster der App den Fokus hat.
             permission::State::Unset => CaptureError::PermissionNeedsFocus,
             permission::State::Granted => {
-                CaptureError::Failed("Portal meldet einen Fehler (Response 2)".into())
+                CaptureError::Failed(tr("The portal reported an error (Response 2)").into())
             }
         },
         ashpd::Error::PortalNotFound(_) | ashpd::Error::Zbus(_) => {
