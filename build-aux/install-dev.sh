@@ -8,6 +8,9 @@ APP_ID=app.porthole.Porthole
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="$ROOT/target/debug/porthole"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
+# Terminals in Snap-Apps (z. B. VS Code) biegen XDG_DATA_HOME nach ~/snap/…
+# um; dort sieht die GNOME Shell die .desktop-Datei nie.
+case "$DATA" in "$HOME"/snap/*) DATA="$HOME/.local/share" ;; esac
 
 install -Dm644 "$ROOT/data/icons/hicolor/scalable/apps/$APP_ID.svg" \
   "$DATA/icons/hicolor/scalable/apps/$APP_ID.svg"

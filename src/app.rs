@@ -33,6 +33,18 @@ fn on_startup(app: &adw::Application) {
     // Läuft ohne Fenster im Hintergrund weiter, bis `app.quit`.
     std::mem::forget(app.hold());
 
+    // Aus dem Terminal einer Snap-App (z. B. VS Code) gestartet, erbt der
+    // Prozess deren Umgebung und Scope; GNOME ordnet das Fenster dann nicht
+    // Porthole zu und verweigert den Erlaubnis-Dialog.
+    if let Some(snap) = std::env::var_os("SNAP_NAME") {
+        glib::g_warning!(
+            config::LOG_DOMAIN,
+            "Läuft in der Snap-Umgebung von „{}“ – Screenshot-Freigabe wird \
+             scheitern. Über das App-Menü oder `systemd-run --user` starten (siehe README).",
+            snap.to_string_lossy()
+        );
+    }
+
     // Die Registrierung muss vor jedem anderen Portal-Aufruf durch sein,
     // sonst gilt die App-ID als leer und BindShortcuts scheitert.
     glib::MainContext::default().spawn_local(glib::clone!(
@@ -77,10 +89,20 @@ fn on_startup(app: &adw::Application) {
             });
         })
         .build();
+    let open_keyboard_settings = gio::ActionEntry::builder("open-keyboard-settings")
+        .activate(|_: &adw::Application, _, _| shortcuts::open_keyboard_settings())
+        .build();
     let quit = gio::ActionEntry::builder("quit")
         .activate(|app: &adw::Application, _, _| app.quit())
         .build();
-    app.add_action_entries([capture, capture_from_window, show, reset_permission, quit]);
+    app.add_action_entries([
+        capture,
+        capture_from_window,
+        show,
+        reset_permission,
+        open_keyboard_settings,
+        quit,
+    ]);
 }
 
 fn on_activate(app: &adw::Application) {

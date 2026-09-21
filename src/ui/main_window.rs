@@ -56,10 +56,22 @@ pub fn present_with_hint(app: &adw::Application, text: &str) {
     set_hint(Some(text));
 }
 
+/// Wie `present_with_hint`, zusätzlich mit Button, der `action` auslöst.
+pub fn present_with_hint_action(app: &adw::Application, text: &str, button: &str, action: &str) {
+    present(app);
+    show_hint(Some(text), Some((button, action)));
+}
+
 pub fn set_hint(text: Option<&str>) {
+    show_hint(text, None);
+}
+
+fn show_hint(text: Option<&str>, button: Option<(&str, &str)>) {
     HINT.with_borrow(|hint| {
         if let Some(hint) = hint {
             hint.set_title(text.unwrap_or_default());
+            hint.set_button_label(button.map(|(label, _)| label));
+            hint.set_action_name(button.map(|(_, action)| action));
             hint.set_revealed(text.is_some());
         }
     });

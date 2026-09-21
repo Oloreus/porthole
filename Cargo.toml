@@ -7,8 +7,8 @@ description = "Schnelle Bereichs-Screenshots für GNOME/Wayland: aufnehmen, kopi
 publish = false
 
 [dependencies]
-gtk = { package = "gtk4", version = "0.10", features = ["v4_18"] }
-adw = { package = "libadwaita", version = "0.8", features = ["v1_7"] }
+gtk = { package = "gtk4", version = "0.10", features = ["v4_14"] }
+adw = { package = "libadwaita", version = "0.8", features = ["v1_5"] }
 # nur für Feature-Flags; die API kommt über gtk::gio
 gio = { version = "0.21", features = ["v2_80"] }
 # Kein tokio: zbus läuft auf seinem eigenen async-io-Thread, Futures werden

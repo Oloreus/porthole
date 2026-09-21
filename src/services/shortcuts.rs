@@ -5,12 +5,16 @@
 //! hinzufügen") und die Shell hält den eigentlichen Grab. Ändern lässt sich das
 //! Kürzel danach unter Einstellungen → Apps → Porthole → Globale Tastenkürzel.
 
+use std::fs;
+use std::path::PathBuf;
+
 use adw::prelude::*;
 use ashpd::desktop::global_shortcuts::{GlobalShortcuts, NewShortcut};
 use futures_util::StreamExt;
 use gtk::glib;
 
 use crate::config;
+use crate::ui::main_window;
 
 /// Stabil halten: GNOME zeigt den Bestätigungsdialog nur für IDs, die es
 /// noch nicht kennt.
@@ -21,12 +25,70 @@ const DEFAULT_TRIGGER: &str = "ALT+s";
 /// Bindet das Kürzel und leitet Auslösungen an `app.capture` weiter. Läuft für
 /// die gesamte Prozesslaufzeit – endet die Session, endet der Grab.
 pub async fn run(app: adw::Application) {
-    if let Err(err) = listen(&app).await {
-        glib::g_warning!(
+    match listen(&app).await {
+        Ok(()) => {}
+        // GNOME < 48 (z. B. Ubuntu 24.04) hat kein GlobalShortcuts-Backend.
+        Err(ashpd::Error::PortalNotFound(_)) => {
+            glib::g_message!(
+                config::LOG_DOMAIN,
+                "GlobalShortcuts-Portal fehlt (GNOME < 48) – Kürzel muss in den \
+                 Tastatureinstellungen mit „porthole --capture“ angelegt werden"
+            );
+            show_missing_portal_hint_once(&app);
+        }
+        Err(err) => glib::g_warning!(
             config::LOG_DOMAIN,
             "Globales Tastenkürzel nicht verfügbar: {err}. Ausweichlösung: in den \
              GNOME-Tastatureinstellungen ein eigenes Kürzel mit dem Befehl \
              „porthole --capture“ anlegen."
+        ),
+    }
+}
+
+/// Holt beim ersten Start das Fenster mit Anleitung nach vorn; danach steht
+/// der Hinweis nur noch im Log und im README.
+fn show_missing_portal_hint_once(app: &adw::Application) {
+    let Some(marker) = hint_marker_path() else {
+        return;
+    };
+    if marker.exists() {
+        return;
+    }
+    main_window::present_with_hint_action(
+        app,
+        "Globales Tastenkürzel braucht GNOME 48. Bitte unter Tastatur → Eigene \
+         Tastenkürzel den Befehl „porthole --capture“ anlegen.",
+        "Öffnen",
+        "app.open-keyboard-settings",
+    );
+    let written = marker
+        .parent()
+        .map_or(Ok(()), fs::create_dir_all)
+        .and_then(|()| fs::write(&marker, b""));
+    if let Err(err) = written {
+        glib::g_warning!(
+            config::LOG_DOMAIN,
+            "Konnte {} nicht anlegen: {err}",
+            marker.display()
+        );
+    }
+}
+
+fn hint_marker_path() -> Option<PathBuf> {
+    let state_dir = glib::user_state_dir();
+    state_dir.is_absolute().then(|| {
+        state_dir
+            .join(config::LOG_DOMAIN)
+            .join("shortcut-hint-shown")
+    })
+}
+
+/// Öffnet die GNOME-Tastatureinstellungen (dort: „Eigene Tastenkürzel“).
+pub fn open_keyboard_settings() {
+    if let Err(err) = glib::spawn_command_line_async("gnome-control-center keyboard") {
+        glib::g_warning!(
+            config::LOG_DOMAIN,
+            "Tastatureinstellungen nicht startbar: {err}"
         );
     }
 }
