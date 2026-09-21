@@ -5,6 +5,7 @@ mod controller;
 mod geometry;
 mod monitors;
 mod portal;
+mod scope;
 mod screenshot;
 mod services;
 mod ui;
@@ -14,5 +15,8 @@ use gtk::glib;
 use gtk::prelude::*;
 
 fn main() -> glib::ExitCode {
+    if let Some(code) = scope::relaunch_if_in_snap_scope() {
+        return code;
+    }
     app::build().run()
 }

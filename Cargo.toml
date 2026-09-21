@@ -30,6 +30,10 @@ maintainer = "Porthole <porthole@localhost>"
 section = "utils"
 priority = "optional"
 depends = "$auto"
+# Porthole selbst braucht sie nicht: Terminal-Programme wie Claude Code lesen
+# Bilder aus der Zwischenablage über wl-paste (Wayland) bzw. xclip (X11).
+# Recommends statt Depends – apt installiert sie standardmäßig mit.
+recommends = "wl-clipboard, xclip"
 extended-description = """\
 Kleines, vollständig lokales Screenshot-Werkzeug für GNOME unter Wayland: \
 Bereich aufziehen, Vorschau, in die Zwischenablage kopieren oder als PNG speichern. \

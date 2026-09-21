@@ -31,6 +31,8 @@ sudo apt install ./target/debian/porthole_*.deb
 
 Das `.deb` auf der ältesten Zielversion bauen (Ubuntu 24.04): Die Paketabhängigkeiten werden aus den Bibliotheksversionen der Build-Maschine abgeleitet – ein auf 25.04+ gebautes Paket lässt sich auf 24.04 nicht installieren. Umgekehrt läuft ein 24.04-Paket auch auf neueren Versionen.
 
+Das Paket empfiehlt `wl-clipboard` und `xclip`: Terminal-Programme (z. B. Claude Code) lesen kopierte Screenshots nur über `wl-paste`/`xclip` aus der Zwischenablage, und Ubuntu bringt beide nicht mit. `apt install` zieht sie automatisch mit, `dpkg -i` nicht.
+
 Beim **ersten** Screenshot fragt GNOME einmalig um Erlaubnis. Dieser Dialog erscheint nur, wenn ein Porthole-Fenster den Fokus hat – deshalb den ersten Screenshot über den Kamera-Button im Porthole-Fenster auslösen (die App weist darauf hin). Danach funktioniert alles aus dem Hintergrund.
 
 ## Entwickeln
@@ -51,15 +53,18 @@ cargo run -- --capture
 cargo test && cargo clippy -- -D warnings
 ```
 
-**VS Code als Snap:** Alles, was aus dessen Terminal startet (auch `cargo run` und `gtk-launch`), erbt die Snap-Umgebung (`GTK_PATH`, `GIO_MODULE_DIR`, `XDG_DATA_HOME` …) und läuft im Scope von VS Code. Folgen: Absturz mit `symbol lookup error: /snap/core20/…/libpthread.so.0`, oder GNOME ordnet das Fenster nicht Porthole zu und verweigert den Freigabedialog (`journalctl --user`: „Only the focused app is allowed to show a system access dialog“; Porthole warnt dann beim Start im Log). Aus diesem Terminal deshalb über den systemd-User-Manager starten, der die saubere Session-Umgebung mitgibt:
+**Terminal einer Snap-App (z. B. VS Code):** Alles, was von dort startet, läuft im Scope der Snap-App (`snap.code.code-….scope`). Das Portal hielte Porthole dann für VS Code, die Shell ordnete die Fenster keiner App zu (kein Dock-Eintrag), und der Freigabedialog würde verweigert („Only the focused app is allowed to show a system access dialog“ in `journalctl --user`). Porthole erkennt das beim Start und startet sich per `systemd-run --user` als eigene Unit `app-app.porthole.Porthole@<pid>` neu (`src/scope.rs`); mit Terminal über `--pty`, sodass Log und Strg+C wie gewohnt funktionieren. `cargo run` geht damit auch aus VS Code.
+
+Der Unit-Name ist nicht beliebig: Ohne Portal-Registry (xdg-desktop-portal < 1.20, also Ubuntu 24.04) leitet das Portal die App-ID aus ihm ab (`app-<App-ID>@….service`). Bei jedem anderen Namen ist die App-ID leer – eine erteilte Screenshot-Freigabe gälte dann für *alle* nicht zuordenbaren Programme. Prüfen und ggf. entfernen:
 
 ```bash
-systemctl --user stop porthole-dev 2>/dev/null
-systemd-run --user --collect --unit=porthole-dev "$PWD/target/debug/porthole"
-journalctl --user -f -u porthole-dev   # Log mitlesen
+gdbus call --session -d org.freedesktop.impl.portal.PermissionStore -o /org/freedesktop/impl/portal/PermissionStore \
+  -m org.freedesktop.impl.portal.PermissionStore.Lookup screenshot screenshot            # Eintrag '' darf nicht auftauchen
+gdbus call --session -d org.freedesktop.impl.portal.PermissionStore -o /org/freedesktop/impl/portal/PermissionStore \
+  -m org.freedesktop.impl.portal.PermissionStore.DeletePermission screenshot screenshot ''
 ```
 
-Alternativ aus einem normalen GNOME-Terminal oder über das App-Menü. Achtung: Porthole ist Single-Instance – läuft schon eine falsch gestartete Instanz, landen alle weiteren Starts (App-Menü, `--capture`) bei ihr. Vorher beenden.
+Porthole ist Single-Instance: Läuft schon eine Instanz, landen alle weiteren Starts (`cargo run`, App-Menü, `--capture`) bei ihr – nach einem neuen Build die alte vorher beenden (Tray → Beenden).
 
 Ein eigenes Tastenkürzel (Ubuntu 24.04) braucht während der Entwicklung den vollen Pfad als Befehl, z. B. `/pfad/zu/porthole/target/debug/porthole --capture` – `porthole` liegt erst nach Installation des `.deb` im `$PATH`.
 
