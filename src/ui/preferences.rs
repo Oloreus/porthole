@@ -5,9 +5,10 @@ use crate::i18n::tr;
 use crate::services::autostart;
 use crate::{config, settings};
 
-/// Preferences dialog. Each setting is a row that writes through to
-/// `settings` immediately; new settings go into a fitting group here.
-pub fn present(parent: &impl IsA<gtk::Widget>) {
+/// The preferences, shown as the content of the main window. Each setting is
+/// a row that writes through to `settings` immediately; new settings go into
+/// a fitting group here.
+pub fn page() -> adw::PreferencesPage {
     let current = settings::get();
 
     // Not in `settings`: the autostart entry itself is the setting.
@@ -45,10 +46,5 @@ pub fn present(parent: &impl IsA<gtk::Widget>) {
     let page = adw::PreferencesPage::new();
     page.add(&general_group);
     page.add(&preview_group);
-
-    let dialog = adw::PreferencesDialog::builder()
-        .title(tr("Preferences"))
-        .build();
-    dialog.add(&page);
-    dialog.present(Some(parent));
+    page
 }

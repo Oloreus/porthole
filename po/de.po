@@ -72,7 +72,7 @@ msgstr "Ausschnitt konnte nicht erzeugt werden"
 msgid "Monitor layout doesn't match the screenshot: {error}"
 msgstr "Monitor-Layout passt nicht zum Screenshot: {error}"
 
-#: src/ui/main_window.rs src/services/tray.rs src/ui/preferences.rs
+#: src/services/tray.rs
 msgid "Preferences"
 msgstr "Einstellungen"
 

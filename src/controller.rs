@@ -81,19 +81,29 @@ impl CaptureController {
     }
 
     async fn capture(self: Rc<Self>) {
-        let started = Instant::now();
-        let result = self.backend.capture_desktop().await;
+        let (frame, started) = loop {
+            let started = Instant::now();
+            let result = self.backend.capture_desktop().await;
+            let Some(app) = self.app.upgrade() else {
+                return;
+            };
+            match result {
+                // Right after the approval the window with the hint is still
+                // in the shot: now that it's hidden, take it again (no dialog
+                // any more).
+                Ok(_) if main_window::capture_succeeded() => {
+                    glib::timeout_future(HIDE_ANIMATION).await;
+                }
+                Ok(frame) => break (frame, started),
+                Err(err) => {
+                    self.set_idle();
+                    report_error(&app, &err);
+                    return;
+                }
+            }
+        };
         let Some(app) = self.app.upgrade() else {
             return;
-        };
-
-        let frame = match result {
-            Ok(frame) => frame,
-            Err(err) => {
-                self.set_idle();
-                report_error(&app, &err);
-                return;
-            }
         };
         glib::g_message!(
             config::LOG_DOMAIN,
@@ -104,7 +114,6 @@ impl CaptureController {
             frame.load_time.as_millis(),
             started.elapsed().as_millis()
         );
-        main_window::set_hint(None);
 
         let layout = monitors::query().await;
         if layout.is_none() {
@@ -164,7 +173,18 @@ fn report_error(app: &adw::Application, err: &CaptureError) {
     match err {
         CaptureError::Cancelled => return,
         CaptureError::PermissionNeedsFocus => {
-            main_window::present_with_hint(app, &err.to_string());
+            // GNOME only needs our window focused to ask: retry by ourselves
+            // as soon as it is. Already focused means the portal refused for
+            // another reason – then the hint and camera button stay.
+            let was_active = main_window::is_active();
+            main_window::present_for_approval(app, &err.to_string());
+            if !was_active {
+                main_window::when_active(glib::clone!(
+                    #[weak]
+                    app,
+                    move || app.activate_action("capture-from-window", None)
+                ));
+            }
             return;
         }
         _ => {}

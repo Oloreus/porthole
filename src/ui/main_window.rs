@@ -1,21 +1,25 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use adw::prelude::*;
-use gtk::gio;
+use gtk::glib;
 
+use super::preferences;
 use crate::config;
-use crate::i18n::tr;
 
 thread_local! {
     static WINDOW: RefCell<Option<adw::ApplicationWindow>> = const { RefCell::new(None) };
     static HINT: RefCell<Option<adw::Banner>> = const { RefCell::new(None) };
+    /// Handler armed by `when_active`.
+    static ON_ACTIVE: RefCell<Option<glib::SignalHandlerId>> = const { RefCell::new(None) };
+    /// The window only came up to get the screenshot approval.
+    static SHOWN_FOR_APPROVAL: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Kleines Bedienfenster mit Kamera-Button. Unter Wayland/Mutter kann ein Client
-/// sich weder positionieren noch „immer im Vordergrund" setzen – das bleibt dem
-/// Nutzer über das Fenstermenü überlassen.
+/// Main window = preferences. Rarely seen: it opens from the app launcher or
+/// tray, and when GNOME needs the one-time screenshot approval, which it only
+/// grants to a focused window – hence the camera button and the hint banner.
 pub fn present(app: &adw::Application) {
-    // Nicht über app.windows() suchen: dort stehen auch Previews und Overlays.
+    // Don't search app.windows(): it also contains previews and overlays.
     if let Some(window) = WINDOW.with_borrow(Clone::clone) {
         window.present();
         return;
@@ -25,57 +29,73 @@ pub fn present(app: &adw::Application) {
         .icon_name("camera-photo-symbolic")
         .tooltip_text("Screenshot aufnehmen (Alt+S)")
         .action_name("app.capture-from-window")
-        .css_classes(["flat"])
         .build();
 
     let header = adw::HeaderBar::new();
     header.pack_start(&capture_button);
 
-    let menu = gio::Menu::new();
-    menu.append(Some(tr("Preferences")), Some("app.preferences"));
-    let menu_button = gtk::MenuButton::builder()
-        .icon_name("open-menu-symbolic")
-        .menu_model(&menu)
-        .primary(true)
-        .build();
-    header.pack_end(&menu_button);
-
     let hint = adw::Banner::new("");
 
-    let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    content.append(&header);
-    content.append(&hint);
+    let layout = adw::ToolbarView::new();
+    layout.add_top_bar(&header);
+    layout.add_top_bar(&hint);
+    layout.set_content(Some(&preferences::page()));
     HINT.set(Some(hint));
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title(config::APP_NAME)
-        .content(&content)
-        .default_width(360)
-        .resizable(false)
-        // Schließen versteckt nur; die App läuft im Hintergrund weiter.
+        .content(&layout)
+        .default_width(480)
+        .default_height(420)
+        // Closing only hides; the app keeps running in the background.
         .hide_on_close(true)
         .build();
-    // Own window group, so its modal dialogs (preferences) only block this
-    // window and not the overlay or open previews.
-    gtk::WindowGroup::new().add_window(&window);
+    // Closed before it got focus: don't fire when opened again later.
+    window.connect_hide(|window| {
+        disarm_when_active(window);
+        SHOWN_FOR_APPROVAL.set(false);
+    });
     window.present();
     WINDOW.set(Some(window));
 }
 
-/// The main window, if it has been created (it may be hidden).
-pub fn window() -> Option<adw::ApplicationWindow> {
-    WINDOW.with_borrow(Clone::clone)
-}
-
-/// Holt das Fenster nach vorn und zeigt einen Hinweis, z. B. für die
-/// einmalige Screenshot-Freigabe, die GNOME nur der fokussierten App erlaubt.
+/// Brings the window to the front and shows a hint, e.g. for the one-time
+/// screenshot approval, which GNOME only grants to the focused app.
 pub fn present_with_hint(app: &adw::Application, text: &str) {
     present(app);
     set_hint(Some(text));
 }
 
-/// Wie `present_with_hint`, zusätzlich mit Button, der `action` auslöst.
+/// Like `present_with_hint`, for the screenshot approval: if the window
+/// wasn't open before, `capture_succeeded` closes it again.
+pub fn present_for_approval(app: &adw::Application, text: &str) {
+    let was_visible =
+        WINDOW.with_borrow(|window| window.as_ref().is_some_and(|window| window.is_visible()));
+    present_with_hint(app, text);
+    if !was_visible {
+        SHOWN_FOR_APPROVAL.set(true);
+    }
+}
+
+/// A capture went through, so the approval exists: clear the hint and close
+/// the window if it only came up for that. `true` if it was closed – it is
+/// then still in that capture.
+pub fn capture_succeeded() -> bool {
+    set_hint(None);
+    if !SHOWN_FOR_APPROVAL.replace(false) {
+        return false;
+    }
+    WINDOW.with_borrow(|window| match window {
+        Some(window) if window.is_visible() => {
+            window.set_visible(false);
+            true
+        }
+        _ => false,
+    })
+}
+
+/// Like `present_with_hint`, plus a button that triggers `action`.
 pub fn present_with_hint_action(app: &adw::Application, text: &str, button: &str, action: &str) {
     present(app);
     show_hint(Some(text), Some((button, action)));
@@ -96,8 +116,37 @@ fn show_hint(text: Option<&str>, button: Option<(&str, &str)>) {
     });
 }
 
-/// Versteckt das Fenster, damit es nicht im Screenshot landet. `true`, wenn es
-/// sichtbar war (dann braucht der Compositor einen Moment zum Ausblenden).
+pub fn is_active() -> bool {
+    WINDOW.with_borrow(|window| window.as_ref().is_some_and(|window| window.is_active()))
+}
+
+/// Runs `callback` once, as soon as the window has keyboard focus. Replaces a
+/// callback that is still waiting; dropped if the window is hidden first.
+pub fn when_active(callback: impl FnOnce() + 'static) {
+    let Some(window) = WINDOW.with_borrow(Clone::clone) else {
+        return;
+    };
+    disarm_when_active(&window);
+    let callback = Cell::new(Some(callback));
+    let handler = window.connect_is_active_notify(move |window| {
+        if window.is_active() {
+            disarm_when_active(window);
+            if let Some(callback) = callback.take() {
+                callback();
+            }
+        }
+    });
+    ON_ACTIVE.set(Some(handler));
+}
+
+fn disarm_when_active(window: &adw::ApplicationWindow) {
+    if let Some(handler) = ON_ACTIVE.take() {
+        window.disconnect(handler);
+    }
+}
+
+/// Hides the window so it doesn't end up in the screenshot. Returns `true` if
+/// it was visible (the compositor then needs a moment to hide it).
 pub fn hide_for_capture() -> bool {
     WINDOW.with_borrow(|window| match window {
         Some(window) if window.is_visible() => {

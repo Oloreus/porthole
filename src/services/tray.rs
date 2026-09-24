@@ -1,6 +1,6 @@
-//! Tray-Icon über StatusNotifierItem (auf Ubuntu von der vorinstallierten
-//! AppIndicator-Erweiterung angezeigt). GTK4 selbst hat keine Tray-API; ksni
-//! spricht das D-Bus-Protokoll direkt und läuft in einem eigenen Thread.
+//! Tray icon via StatusNotifierItem (shown on Ubuntu by the preinstalled
+//! AppIndicator extension). GTK4 itself has no tray API; ksni speaks the
+//! D-Bus protocol directly and runs on its own thread.
 
 use gtk::prelude::*;
 use gtk::{gio, glib};
@@ -11,7 +11,7 @@ use crate::i18n::tr;
 
 struct PortholeTray;
 
-/// Aktiviert eine App-Action vom Tray-Thread aus im GTK-Hauptthread.
+/// Activates an app action on the GTK main thread from the tray thread.
 fn activate_app_action(name: &'static str) {
     glib::MainContext::default().invoke(move || {
         if let Some(app) = gio::Application::default() {
@@ -33,8 +33,8 @@ impl ksni::Tray for PortholeTray {
         format!("{}-symbolic", config::APP_ID)
     }
 
-    // Ubuntus AppIndicator-Erweiterung öffnet bei Linksklick das Menü und
-    // ruft `activate` nur bei Doppelklick; andere Desktops bei einfachem Klick.
+    // Ubuntu's AppIndicator extension opens the menu on left click and only
+    // calls `activate` on double click; other desktops call it on single click.
     fn activate(&mut self, _x: i32, _y: i32) {
         activate_app_action("capture");
     }
@@ -54,20 +54,19 @@ impl ksni::Tray for PortholeTray {
 
         vec![
             item("Screenshot aufnehmen", "camera-photo-symbolic", "capture"),
-            item("Fenster anzeigen", "focus-windows-symbolic", "show"),
+            item(tr("Preferences"), "preferences-system-symbolic", "show"),
             ksni::MenuItem::Separator,
-            item(tr("Preferences"), "preferences-system-symbolic", "preferences"),
             item("Beenden", "application-exit-symbolic", "quit"),
         ]
     }
 }
 
-/// Startet das Tray im Hintergrund. Fehlt ein Tray-Host (GNOME ohne
-/// Erweiterung), bleibt die App über Launcher, Fenster und Tastenkürzel
-/// bedienbar.
+/// Starts the tray in the background. Without a tray host (GNOME without
+/// the extension), the app stays usable via launcher, window and keyboard
+/// shortcut.
 pub fn start() {
     std::thread::spawn(|| match PortholeTray.spawn() {
-        // Das Handle hält den Dienst am Leben – für die Prozesslaufzeit.
+        // The handle keeps the service alive for the lifetime of the process.
         Ok(handle) => std::mem::forget(handle),
         Err(err) => glib::g_message!(config::LOG_DOMAIN, "Kein Tray-Icon: {err}"),
     });
