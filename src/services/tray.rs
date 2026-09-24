@@ -6,7 +6,6 @@ use gtk::prelude::*;
 use gtk::{gio, glib};
 use ksni::blocking::TrayMethods;
 
-use super::autostart;
 use crate::config;
 use crate::i18n::tr;
 
@@ -41,7 +40,7 @@ impl ksni::Tray for PortholeTray {
     }
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
-        use ksni::menu::{CheckmarkItem, StandardItem};
+        use ksni::menu::StandardItem;
 
         let item = |label: &str, icon: &str, action: &'static str| -> ksni::MenuItem<Self> {
             StandardItem {
@@ -58,17 +57,6 @@ impl ksni::Tray for PortholeTray {
             item("Fenster anzeigen", "focus-windows-symbolic", "show"),
             ksni::MenuItem::Separator,
             item(tr("Preferences"), "preferences-system-symbolic", "preferences"),
-            CheckmarkItem {
-                label: "Beim Anmelden starten".into(),
-                checked: autostart::is_enabled(),
-                activate: Box::new(|_| {
-                    if let Err(err) = autostart::set_enabled(!autostart::is_enabled()) {
-                        glib::g_warning!(config::LOG_DOMAIN, "Autostart nicht änderbar: {err}");
-                    }
-                }),
-                ..Default::default()
-            }
-            .into(),
             item("Beenden", "application-exit-symbolic", "quit"),
         ]
     }

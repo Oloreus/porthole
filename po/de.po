@@ -87,3 +87,11 @@ msgstr "Nach dem Kopieren schließen"
 #: src/ui/preferences.rs
 msgid "Applies to the Copy button and Ctrl+C"
 msgstr "Gilt für den Kopieren-Knopf und Strg+C"
+
+#: src/ui/preferences.rs
+msgid "General"
+msgstr "Allgemein"
+
+#: src/ui/preferences.rs
+msgid "Start at login"
+msgstr "Beim Anmelden starten"

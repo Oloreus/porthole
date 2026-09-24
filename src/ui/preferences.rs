@@ -1,12 +1,31 @@
 use adw::prelude::*;
+use gtk::glib;
 
 use crate::i18n::tr;
-use crate::settings;
+use crate::services::autostart;
+use crate::{config, settings};
 
 /// Preferences dialog. Each setting is a row that writes through to
 /// `settings` immediately; new settings go into a fitting group here.
 pub fn present(parent: &impl IsA<gtk::Widget>) {
     let current = settings::get();
+
+    // Not in `settings`: the autostart entry itself is the setting.
+    let autostart_row = adw::SwitchRow::builder()
+        .title(tr("Start at login"))
+        .active(autostart::is_enabled())
+        .build();
+    autostart_row.connect_active_notify(|row| {
+        if let Err(err) = autostart::set_enabled(row.is_active()) {
+            glib::g_warning!(config::LOG_DOMAIN, "Autostart not changeable: {err}");
+            row.set_active(autostart::is_enabled());
+        }
+    });
+
+    let general_group = adw::PreferencesGroup::builder()
+        .title(tr("General"))
+        .build();
+    general_group.add(&autostart_row);
 
     let close_after_copy = adw::SwitchRow::builder()
         .title(tr("Close after copying"))
@@ -24,6 +43,7 @@ pub fn present(parent: &impl IsA<gtk::Widget>) {
     preview_group.add(&close_after_copy);
 
     let page = adw::PreferencesPage::new();
+    page.add(&general_group);
     page.add(&preview_group);
 
     let dialog = adw::PreferencesDialog::builder()
