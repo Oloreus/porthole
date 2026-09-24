@@ -1,7 +1,7 @@
 use gtk::glib;
 use gtk::subclass::prelude::*;
 
-use crate::geometry::{PixelRect, Rect};
+use crate::geometry::Rect;
 
 mod imp {
     use std::cell::{Cell, RefCell};
@@ -10,7 +10,7 @@ mod imp {
     use gtk::subclass::prelude::*;
     use gtk::{gdk, glib, graphene, gsk};
 
-    use crate::geometry::{self, PixelRect, Rect};
+    use crate::geometry::Rect;
 
     const DIM: gdk::RGBA = gdk::RGBA::new(0.0, 0.0, 0.0, 0.45);
     const BORDER_INNER: gdk::RGBA = gdk::RGBA::new(1.0, 1.0, 1.0, 1.0);
@@ -22,10 +22,10 @@ mod imp {
     #[derive(Default)]
     pub struct SelectionArea {
         pub texture: RefCell<Option<gdk::Texture>>,
-        /// Teil des Desktop-Bildes, den dieses Widget (= ein Monitor) zeigt.
-        pub region: Cell<Option<PixelRect>>,
-        /// Aktuelle Auswahl in Widget-Koordinaten.
+        /// This monitor's part of the selection, in widget coordinates.
         pub selection: Cell<Option<Rect>>,
+        /// Size of the whole selection; only one monitor shows it.
+        pub label: RefCell<Option<String>>,
         pub show_hint: Cell<bool>,
     }
 
@@ -56,7 +56,7 @@ mod imp {
                 return;
             };
 
-            // Abdunklung als vier Rechtecke um die Auswahl herum.
+            // Dimming as four rectangles around the selection.
             let (x, y) = (selection.x as f32, selection.y as f32);
             let (w, h) = (selection.width as f32, selection.height as f32);
             for dim in [
@@ -68,8 +68,8 @@ mod imp {
                 snapshot.append_color(&DIM, &dim);
             }
 
-            // Heller Rahmen mit dunkler Kontur: auf jedem Untergrund sichtbar.
-            // Beide liegen außerhalb der Auswahl und verdecken keinen Inhalt.
+            // Light border with a dark outline: visible on any background.
+            // Both lie outside the selection and cover no content.
             for (inset, color) in [(-2.0, BORDER_OUTER), (-1.0, BORDER_INNER)] {
                 let rect = graphene::Rect::new(x, y, w, h).inset_r(inset, inset);
                 snapshot.append_border(
@@ -79,17 +79,11 @@ mod imp {
                 );
             }
 
-            if let Some(region) = self.region.get() {
-                let pixels = geometry::selection_to_pixels(
-                    selection,
-                    (f64::from(width), f64::from(height)),
-                    region,
-                );
-                let text = format!("{} × {}", pixels.width, pixels.height);
-                // Unter der Auswahl, am unteren Bildschirmrand darüber.
+            if let Some(text) = self.label.borrow().as_deref() {
+                // Below the selection; above it at the bottom screen edge.
                 let below = y + h + 8.0;
                 let label_y = if below + 28.0 < height { below } else { y - 32.0 };
-                self.draw_text(snapshot, &text, x.max(4.0), label_y.max(4.0), false);
+                self.draw_text(snapshot, text, x.max(4.0), label_y.max(4.0), false);
             }
         }
     }
@@ -120,37 +114,31 @@ mod imp {
 }
 
 glib::wrapper! {
-    /// Zeichnet den eingefrorenen Desktop eines Monitors, die Abdunklung und
-    /// die Auswahl. Rein darstellend – die Eingabe steuert die Overlay-Session.
+    /// Draws one monitor's frozen desktop, the dimming and the selection.
+    /// Display only – input is handled by the overlay session.
     pub struct SelectionArea(ObjectSubclass<imp::SelectionArea>)
         @extends gtk::Widget,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
 
 impl SelectionArea {
-    pub fn new(texture: &gtk::gdk::Texture, region: PixelRect) -> Self {
+    pub fn new(texture: &gtk::gdk::Texture) -> Self {
         let area: Self = glib::Object::new();
         let imp = area.imp();
         imp.texture.replace(Some(texture.clone()));
-        imp.region.set(Some(region));
         imp.show_hint.set(true);
         area
     }
 
-    pub fn region(&self) -> PixelRect {
-        self.imp().region.get().unwrap_or(PixelRect::new(0, 0, 0, 0))
-    }
-
-    pub fn selection(&self) -> Option<Rect> {
-        self.imp().selection.get()
-    }
-
-    pub fn set_selection(&self, selection: Option<Rect>) {
+    /// `selection`: this monitor's part of the selection (widget coordinates),
+    /// `None` if the selection doesn't touch it. Hides the hint – as soon as
+    /// a drag happens anywhere, on all monitors.
+    pub fn set_selection(&self, selection: Option<Rect>, label: Option<String>) {
         use gtk::prelude::WidgetExt;
-        self.imp().selection.set(selection);
-        if selection.is_some() {
-            self.imp().show_hint.set(false);
-        }
+        let imp = self.imp();
+        imp.selection.set(selection);
+        imp.label.replace(label);
+        imp.show_hint.set(false);
         self.queue_draw();
     }
 }

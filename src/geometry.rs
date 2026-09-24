@@ -1,16 +1,16 @@
-//! Reine Koordinatenmathematik, frei von GTK – dadurch ohne Hardware testbar.
+//! Pure coordinate math, free of GTK – and therefore testable without hardware.
 //!
-//! Drei Koordinatenräume:
-//! * **Stage**: Mutters globaler Raum, in dem die Monitore angeordnet sind
-//!   (logische Pixel im Logical-Layout, physische im Physical-Layout).
-//! * **Bild**: Pixel des Portal-Screenshots. Er ist *ein* Rendering der ganzen
-//!   Stage, gleichmäßig skaliert mit dem größten Monitor-Scale – das Portal
-//!   verrät den Faktor nicht, er wird aus den Größen abgeleitet.
-//! * **Fenster**: lokale Koordinaten eines Overlay-Fensters, das genau einen
-//!   Monitor bedeckt.
+//! Three coordinate spaces:
+//! * **Stage**: Mutter's global space in which the monitors are arranged
+//!   (logical pixels in the logical layout, physical ones in the physical layout).
+//! * **Image**: pixels of the portal screenshot. It is *one* rendering of the
+//!   whole stage, scaled uniformly by the largest monitor scale – the portal
+//!   doesn't reveal the factor, it is derived from the sizes.
+//! * **Window**: local coordinates of an overlay window covering exactly one
+//!   monitor.
 //!
-//! Umgerechnet wird ausschließlich über Verhältnisse, nie über gemeldete
-//! Scale-Faktoren – so ist egal, was GDK bei Fractional Scaling meldet.
+//! Conversion uses ratios only, never reported scale factors – so it doesn't
+//! matter what GDK reports under fractional scaling.
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rect {
@@ -33,7 +33,7 @@ impl Rect {
         Self { x, y, width, height }
     }
 
-    /// Rechteck zwischen zwei beliebigen Eckpunkten (Drag in jede Richtung).
+    /// Rectangle between any two corner points (drag in any direction).
     pub fn from_points(a: (f64, f64), b: (f64, f64)) -> Self {
         Self {
             x: a.0.min(b.0),
@@ -49,6 +49,21 @@ impl Rect {
         let right = (self.x + self.width).clamp(bounds.x, bounds.x + bounds.width);
         let bottom = (self.y + self.height).clamp(bounds.y, bounds.y + bounds.height);
         Self::new(left, top, right - left, bottom - top)
+    }
+
+    /// Overlap of two rectangles; `None` if it has no area (including when
+    /// they merely touch along an edge).
+    pub fn intersection(self, other: Rect) -> Option<Self> {
+        let left = self.x.max(other.x);
+        let top = self.y.max(other.y);
+        let right = (self.x + self.width).min(other.x + other.width);
+        let bottom = (self.y + self.height).min(other.y + other.height);
+        (right > left && bottom > top).then(|| Self::new(left, top, right - left, bottom - top))
+    }
+
+    /// Whether the point lies in the rectangle, edges included.
+    pub fn contains(self, (x, y): (f64, f64)) -> bool {
+        x >= self.x && x <= self.x + self.width && y >= self.y && y <= self.y + self.height
     }
 
     pub fn union(self, other: Rect) -> Self {
@@ -73,13 +88,12 @@ impl PixelRect {
 #[derive(Debug, PartialEq)]
 pub enum LayoutError {
     NoMonitors,
-    /// Bild und Monitor-Layout passen nicht zusammen (z. B. Layout hat sich
-    /// zwischen Capture und Abfrage geändert). Lieber abbrechen als falsch
-    /// zuschneiden.
+    /// Image and monitor layout don't match (e.g. the layout changed between
+    /// capture and query). Better to abort than to crop wrongly.
     Mismatch { scale_x: f64, scale_y: f64 },
 }
 
-/// Bildregion je Monitor, in der Reihenfolge von `monitors` (Stage-Rechtecke).
+/// Image region per monitor, in the order of `monitors` (stage rectangles).
 pub fn monitor_regions(
     monitors: &[Rect],
     image_size: (i32, i32),
@@ -92,7 +106,7 @@ pub fn monitor_regions(
 
     let scale_x = f64::from(image_size.0) / stage.width;
     let scale_y = f64::from(image_size.1) / stage.height;
-    // Toleranz: ein Pixel Rundung über die gesamte Bildkante.
+    // Tolerance: one pixel of rounding across the whole image edge.
     let tolerance = 1.0 / stage.width.min(stage.height);
     if (scale_x - scale_y).abs() > tolerance.max(1e-3) {
         return Err(LayoutError::Mismatch { scale_x, scale_y });
@@ -113,10 +127,10 @@ pub fn monitor_regions(
         .collect())
 }
 
-/// Auswahl in Fensterkoordinaten → Bildpixel innerhalb der Monitor-Region.
+/// Selection in window coordinates → image pixels within the monitor region.
 ///
-/// Gerundet wird genau einmal, nach außen (Ursprung ab-, Ende aufrunden):
-/// jedes auch nur angeschnittene Pixel gehört zur Auswahl.
+/// Rounds exactly once, outward (origin down, end up): every pixel that is
+/// even partially covered belongs to the selection.
 pub fn selection_to_pixels(
     selection: Rect,
     window_size: (f64, f64),
@@ -129,7 +143,7 @@ pub fn selection_to_pixels(
     let scale_y = f64::from(region.height) / window_size.1;
     let selection = selection.clamp_to(Rect::new(0.0, 0.0, window_size.0, window_size.1));
 
-    // Epsilon fängt Fließkomma-Rauschen ab (z. B. 100.00000001 → 101 Pixel).
+    // Epsilon absorbs floating-point noise (e.g. 100.00000001 → 101 pixels).
     const EPSILON: f64 = 1e-6;
     let left = (selection.x * scale_x + EPSILON).floor() as i32;
     let top = (selection.y * scale_y + EPSILON).floor() as i32;
@@ -171,6 +185,24 @@ mod tests {
     }
 
     #[test]
+    fn intersection_ignores_touching_edges() {
+        let left = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let right = Rect::new(100.0, 0.0, 100.0, 100.0);
+        assert_eq!(left.intersection(right), None);
+        assert_eq!(
+            Rect::new(50.0, 10.0, 100.0, 20.0).intersection(right),
+            Some(Rect::new(100.0, 10.0, 50.0, 20.0))
+        );
+    }
+
+    #[test]
+    fn contains_includes_edges() {
+        let rect = Rect::new(0.0, 0.0, 100.0, 100.0);
+        assert!(rect.contains((100.0, 100.0)));
+        assert!(!rect.contains((100.5, 50.0)));
+    }
+
+    #[test]
     fn single_monitor_covers_whole_image() {
         let regions = monitor_regions(&[Rect::new(0.0, 0.0, 2560.0, 1440.0)], (2560, 1440));
         assert_eq!(regions, Ok(vec![PixelRect::new(0, 0, 2560, 1440)]));
@@ -178,15 +210,15 @@ mod tests {
 
     #[test]
     fn single_monitor_at_200_percent() {
-        // Logical-Layout: Stage 1280x720, Bild in physischen Pixeln.
+        // Logical layout: stage 1280x720, image in physical pixels.
         let regions = monitor_regions(&[Rect::new(0.0, 0.0, 1280.0, 720.0)], (2560, 1440));
         assert_eq!(regions, Ok(vec![PixelRect::new(0, 0, 2560, 1440)]));
     }
 
     #[test]
     fn mixed_scales_logical_layout() {
-        // 2560x1440 @100 % links, 3840x2160 @150 % rechts (logisch 2560x1440).
-        // Stage 5120x1440, Portal rendert mit max. Scale 1.5 → 7680x2160.
+        // 2560x1440 @100 % on the left, 3840x2160 @150 % on the right (logical 2560x1440).
+        // Stage 5120x1440, portal renders at max scale 1.5 → 7680x2160.
         let monitors = [
             Rect::new(0.0, 0.0, 2560.0, 1440.0),
             Rect::new(2560.0, 0.0, 2560.0, 1440.0),
@@ -198,7 +230,7 @@ mod tests {
 
     #[test]
     fn mixed_resolutions_physical_layout() {
-        // Physical-Layout: Stage in physischen Pixeln, Faktor 1.
+        // Physical layout: stage in physical pixels, factor 1.
         let monitors = [
             Rect::new(0.0, 0.0, 2560.0, 1440.0),
             Rect::new(2560.0, 0.0, 3840.0, 2160.0),
@@ -210,7 +242,7 @@ mod tests {
 
     #[test]
     fn offset_arrangement_with_negative_origin() {
-        // Zweiter Monitor links oberhalb: Stage beginnt nicht bei (0,0).
+        // Second monitor to the upper left: stage doesn't start at (0,0).
         let monitors = [
             Rect::new(0.0, 0.0, 1920.0, 1080.0),
             Rect::new(-1920.0, -200.0, 1920.0, 1080.0),
@@ -248,7 +280,7 @@ mod tests {
 
     #[test]
     fn fractional_selection_rounds_outward() {
-        // 150 %: Fenster 1707x960 logisch auf 2560x1440 Pixeln.
+        // 150 %: window 1707x960 logical on 2560x1440 pixels.
         let region = PixelRect::new(0, 0, 2560, 1440);
         let pixels = selection_to_pixels(
             Rect::new(10.3, 10.3, 100.2, 100.2),
