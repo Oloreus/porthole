@@ -71,3 +71,19 @@ msgstr "Ausschnitt konnte nicht erzeugt werden"
 #: src/ui/overlay.rs
 msgid "Monitor layout doesn't match the screenshot: {error}"
 msgstr "Monitor-Layout passt nicht zum Screenshot: {error}"
+
+#: src/ui/main_window.rs src/services/tray.rs src/ui/preferences.rs
+msgid "Preferences"
+msgstr "Einstellungen"
+
+#: src/ui/preferences.rs
+msgid "Screenshot Window"
+msgstr "Screenshot-Fenster"
+
+#: src/ui/preferences.rs
+msgid "Close after copying"
+msgstr "Nach dem Kopieren schließen"
+
+#: src/ui/preferences.rs
+msgid "Applies to the Copy button and Ctrl+C"
+msgstr "Gilt für den Kopieren-Knopf und Strg+C"

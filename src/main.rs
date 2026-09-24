@@ -9,6 +9,7 @@ mod portal;
 mod scope;
 mod screenshot;
 mod services;
+mod settings;
 mod ui;
 mod viewport;
 

@@ -6,6 +6,7 @@ use gtk::{gdk, gio, glib};
 use crate::screenshot::Screenshot;
 use crate::services::save::SaveOutcome;
 use crate::services::{clipboard, save};
+use crate::settings;
 use crate::ui::zoom_view::ZoomView;
 
 const MIN_WIDTH: i32 = 380;
@@ -95,6 +96,12 @@ fn install_actions(
             move |_: &gio::SimpleActionGroup, _, _| {
                 let display = WidgetExt::display(&window);
                 let message = match clipboard::copy_image(&display, &screenshot) {
+                    // The clipboard belongs to the display, not the window:
+                    // the image stays available after closing.
+                    Ok(()) if settings::get().close_preview_after_copy => {
+                        window.destroy();
+                        return;
+                    }
                     Ok(()) => "In Zwischenablage kopiert".to_string(),
                     Err(err) => format!("Kopieren fehlgeschlagen: {err}"),
                 };

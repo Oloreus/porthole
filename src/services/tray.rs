@@ -8,6 +8,7 @@ use ksni::blocking::TrayMethods;
 
 use super::autostart;
 use crate::config;
+use crate::i18n::tr;
 
 struct PortholeTray;
 
@@ -56,6 +57,7 @@ impl ksni::Tray for PortholeTray {
             item("Screenshot aufnehmen", "camera-photo-symbolic", "capture"),
             item("Fenster anzeigen", "focus-windows-symbolic", "show"),
             ksni::MenuItem::Separator,
+            item(tr("Preferences"), "preferences-system-symbolic", "preferences"),
             CheckmarkItem {
                 label: "Beim Anmelden starten".into(),
                 checked: autostart::is_enabled(),

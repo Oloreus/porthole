@@ -182,8 +182,13 @@ pub fn present(
         on_done: RefCell::new(Some(Box::new(on_done))),
     });
 
+    // Own window group: a modal window elsewhere in the app (e.g. the
+    // preferences dialog) grabs input for its whole group, which is by default
+    // every window of the app – the overlay would then ignore mouse and ESC.
+    let group = gtk::WindowGroup::new();
     for (index, monitor) in monitors.iter().enumerate() {
         let window = build_window(app, &session, index);
+        group.add_window(&window);
         window.fullscreen_on_monitor(monitor);
         session.windows.borrow_mut().push(window);
     }

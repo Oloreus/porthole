@@ -74,6 +74,15 @@ fn on_startup(app: &adw::Application) {
     let open_keyboard_settings = gio::ActionEntry::builder("open-keyboard-settings")
         .activate(|_: &adw::Application, _, _| shortcuts::open_keyboard_settings())
         .build();
+    let preferences = gio::ActionEntry::builder("preferences")
+        .activate(|app: &adw::Application, _, _| {
+            // The dialog needs a parent window.
+            ui::main_window::present(app);
+            if let Some(window) = ui::main_window::window() {
+                ui::preferences::present(&window);
+            }
+        })
+        .build();
     let quit = gio::ActionEntry::builder("quit")
         .activate(|app: &adw::Application, _, _| app.quit())
         .build();
@@ -83,8 +92,10 @@ fn on_startup(app: &adw::Application) {
         show,
         reset_permission,
         open_keyboard_settings,
+        preferences,
         quit,
     ]);
+    app.set_accels_for_action("app.preferences", &["<Control>comma"]);
 }
 
 fn on_activate(app: &adw::Application) {

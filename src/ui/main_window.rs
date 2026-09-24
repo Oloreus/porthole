@@ -1,8 +1,10 @@
 use std::cell::RefCell;
 
 use adw::prelude::*;
+use gtk::gio;
 
 use crate::config;
+use crate::i18n::tr;
 
 thread_local! {
     static WINDOW: RefCell<Option<adw::ApplicationWindow>> = const { RefCell::new(None) };
@@ -29,6 +31,15 @@ pub fn present(app: &adw::Application) {
     let header = adw::HeaderBar::new();
     header.pack_start(&capture_button);
 
+    let menu = gio::Menu::new();
+    menu.append(Some(tr("Preferences")), Some("app.preferences"));
+    let menu_button = gtk::MenuButton::builder()
+        .icon_name("open-menu-symbolic")
+        .menu_model(&menu)
+        .primary(true)
+        .build();
+    header.pack_end(&menu_button);
+
     let hint = adw::Banner::new("");
 
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -45,8 +56,16 @@ pub fn present(app: &adw::Application) {
         // Schließen versteckt nur; die App läuft im Hintergrund weiter.
         .hide_on_close(true)
         .build();
+    // Own window group, so its modal dialogs (preferences) only block this
+    // window and not the overlay or open previews.
+    gtk::WindowGroup::new().add_window(&window);
     window.present();
     WINDOW.set(Some(window));
+}
+
+/// The main window, if it has been created (it may be hidden).
+pub fn window() -> Option<adw::ApplicationWindow> {
+    WINDOW.with_borrow(Clone::clone)
 }
 
 /// Holt das Fenster nach vorn und zeigt einen Hinweis, z. B. für die
