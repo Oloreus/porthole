@@ -86,6 +86,13 @@ impl Viewport {
         Rect::new(self.pan.0, self.pan.1, self.image.0 * zoom, self.image.1 * zoom)
     }
 
+    /// Viewport point → image point at 100 % (logical pixels from the image's
+    /// top left corner). May lie outside the image.
+    pub fn image_point(&self, point: (f64, f64)) -> (f64, f64) {
+        let zoom = self.zoom();
+        ((point.0 - self.pan.0) / zoom, (point.1 - self.pan.1) / zoom)
+    }
+
     pub fn is_pannable(&self) -> bool {
         let rect = self.image_rect();
         rect.width > self.size.0 + SLACK || rect.height > self.size.1 + SLACK
@@ -213,9 +220,7 @@ mod tests {
     }
 
     fn image_point_at(viewport: &Viewport, point: (f64, f64)) -> (f64, f64) {
-        let rect = viewport.image_rect();
-        let zoom = viewport.zoom();
-        ((point.0 - rect.x) / zoom, (point.1 - rect.y) / zoom)
+        viewport.image_point(point)
     }
 
     fn assert_within_bounds(viewport: &Viewport) {
@@ -433,6 +438,17 @@ mod tests {
         assert!(fit < MIN_MANUAL_ZOOM);
         viewport.zoom_at((0.0, 0.0), 1.0 / ZOOM_STEP);
         assert_eq!(viewport.zoom(), fit);
+    }
+
+    #[test]
+    fn image_point_maps_corners_of_the_drawn_image() {
+        let mut viewport = large();
+        viewport.set_zoom_at(center(&viewport), 2.0);
+        let rect = viewport.image_rect();
+        let top_left = viewport.image_point((rect.x, rect.y));
+        let bottom_right = viewport.image_point((rect.x + rect.width, rect.y + rect.height));
+        assert!(top_left.0.abs() < 1e-9 && top_left.1.abs() < 1e-9);
+        assert!((bottom_right.0 - 2494.0).abs() < 1e-6 && (bottom_right.1 - 1285.0).abs() < 1e-6);
     }
 
     #[test]

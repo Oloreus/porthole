@@ -1,6 +1,7 @@
 use gtk::prelude::*;
-use gtk::{gdk, gio, glib};
+use gtk::{gdk, gio, glib, graphene, gsk};
 
+use crate::annotations::{self, Shape};
 use crate::geometry::PixelRect;
 
 const FORMAT: gdk::MemoryFormat = gdk::MemoryFormat::R8g8b8a8;
@@ -27,6 +28,29 @@ impl Screenshot {
             .ok()?;
 
         Some(Self { texture, png, taken_at })
+    }
+
+    /// The same screenshot with `shapes` burned into the pixels, at full
+    /// resolution. Synchronous on purpose: copying must happen within the
+    /// user action, see `services::clipboard`.
+    pub fn with_annotations(&self, shapes: &[Shape]) -> Option<Self> {
+        annotations::register_node_types();
+        // Software rendering: needs no window or GPU, and its result is
+        // already in memory for the PNG encoder.
+        let renderer = gsk::CairoRenderer::new();
+        renderer.realize(None).ok()?;
+
+        let (width, height) = (self.texture.width(), self.texture.height());
+        let bounds = graphene::Rect::new(0.0, 0.0, width as f32, height as f32);
+        let mut nodes = vec![gsk::TextureNode::new(&self.texture, &bounds).upcast()];
+        nodes.extend(annotations::render_nodes(shapes));
+        let root = gsk::ContainerNode::new(&nodes);
+
+        let texture = renderer.render_texture(&root, Some(&bounds));
+        renderer.unrealize();
+
+        let png = texture.save_to_png_bytes();
+        Some(Self { texture, png, taken_at: self.taken_at.clone() })
     }
 
     /// z. B. `Screenshot_2026-09-19_09-28-00.png`
@@ -150,6 +174,42 @@ mod tests {
         // Bis in die letzte Ecke (Puffer-Ende) darf nichts überlaufen.
         let full = super::view(&frame, PixelRect::new(0, 0, 4, 3));
         assert_eq!(pixels_of(&full).len(), 12);
+    }
+
+    #[test]
+    fn annotations_are_burned_in_at_full_size() {
+        use crate::annotations::{Color, ShapeKind};
+
+        let pixels = vec![0u8; 40 * 30 * BYTES_PER_PIXEL];
+        let texture: gdk::Texture =
+            gdk::MemoryTexture::new(40, 30, FORMAT, &glib::Bytes::from_owned(pixels), 40 * 4).upcast();
+        let screenshot = Screenshot {
+            png: texture.save_to_png_bytes(),
+            texture,
+            taken_at: glib::DateTime::now_local().unwrap(),
+        };
+        let shape = Shape {
+            kind: ShapeKind::Rectangle,
+            from: (10.0, 10.0),
+            to: (30.0, 20.0),
+            color: Color::Green,
+            width: 2.0,
+        };
+
+        let annotated = screenshot.with_annotations(&[shape]).unwrap();
+        assert_eq!((annotated.texture.width(), annotated.texture.height()), (40, 30));
+        let (bytes, stride) = download(&annotated.texture);
+        let at = |x: usize, y: usize| {
+            let offset = y * stride + x * BYTES_PER_PIXEL;
+            (bytes[offset], bytes[offset + 1], bytes[offset + 2])
+        };
+        // On the left edge of the rectangle: green (#2ec27e).
+        assert_eq!(at(10, 15), (0x2e, 0xc2, 0x7e));
+        // Inside and outside: untouched.
+        assert_eq!(at(20, 15), (0, 0, 0));
+        assert_eq!(at(2, 2), (0, 0, 0));
+        let decoded = gdk::Texture::from_bytes(&annotated.png).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (40, 30));
     }
 
     #[test]

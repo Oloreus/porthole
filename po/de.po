@@ -95,3 +95,51 @@ msgstr "Allgemein"
 #: src/ui/preferences.rs
 msgid "Start at login"
 msgstr "Beim Anmelden starten"
+
+#: src/ui/preview.rs
+msgid "Pointer: pan and zoom (Esc)"
+msgstr "Zeiger: verschieben und zoomen (Esc)"
+
+#: src/ui/preview.rs
+msgid "Rectangle"
+msgstr "Rechteck"
+
+#: src/ui/preview.rs
+msgid "Ellipse"
+msgstr "Ellipse"
+
+#: src/ui/preview.rs
+msgid "Arrow"
+msgstr "Pfeil"
+
+#: src/ui/preview.rs
+msgid "Undo last shape (Ctrl+Z)"
+msgstr "Letzte Figur rückgängig (Strg+Z)"
+
+#: src/ui/preview.rs
+msgid "Red"
+msgstr "Rot"
+
+#: src/ui/preview.rs
+msgid "Orange"
+msgstr "Orange"
+
+#: src/ui/preview.rs
+msgid "Green"
+msgstr "Grün"
+
+#: src/ui/preview.rs
+msgid "Blue"
+msgstr "Blau"
+
+#: src/ui/preview.rs
+msgid "White"
+msgstr "Weiß"
+
+#: src/ui/preview.rs
+msgid "Black"
+msgstr "Schwarz"
+
+#: src/ui/preview.rs
+msgid "The shapes could not be applied"
+msgstr "Die Figuren konnten nicht übernommen werden"

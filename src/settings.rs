@@ -7,15 +7,20 @@ use std::path::PathBuf;
 
 use gtk::glib;
 
+use crate::annotations::Color;
 use crate::config;
 
 const GROUP_PREVIEW: &str = "preview";
 const KEY_CLOSE_AFTER_COPY: &str = "close-after-copy";
+const GROUP_ANNOTATE: &str = "annotate";
+const KEY_COLOR: &str = "color";
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Settings {
     /// Close the preview window once its image is on the clipboard.
     pub close_preview_after_copy: bool,
+    /// Last color picked in the screenshot window's palette.
+    pub annotation_color: Color,
 }
 
 thread_local! {
@@ -50,12 +55,18 @@ fn load() -> Settings {
         close_preview_after_copy: file
             .boolean(GROUP_PREVIEW, KEY_CLOSE_AFTER_COPY)
             .unwrap_or(defaults.close_preview_after_copy),
+        annotation_color: file
+            .string(GROUP_ANNOTATE, KEY_COLOR)
+            .ok()
+            .and_then(|name| Color::from_name(&name))
+            .unwrap_or(defaults.annotation_color),
     }
 }
 
 fn save(settings: &Settings) -> Result<(), glib::Error> {
     let file = glib::KeyFile::new();
     file.set_boolean(GROUP_PREVIEW, KEY_CLOSE_AFTER_COPY, settings.close_preview_after_copy);
+    file.set_string(GROUP_ANNOTATE, KEY_COLOR, settings.annotation_color.name());
 
     let path = path();
     if let Some(dir) = path.parent() {
