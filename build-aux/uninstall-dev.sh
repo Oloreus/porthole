@@ -10,7 +10,10 @@ case "$DATA" in "$HOME"/snap/*) DATA="$HOME/.local/share" ;; esac
 rm -f "$DATA/applications/$APP_ID.desktop" \
       "$DATA/icons/hicolor/scalable/apps/$APP_ID.svg" \
       "$DATA/icons/hicolor/symbolic/apps/$APP_ID-symbolic.svg"
-rm -f "$DATA/icons/hicolor/icon-theme.cache"
+if [[ -d "$DATA/icons/hicolor" ]]; then
+  gtk-update-icon-cache --force --ignore-theme-index "$DATA/icons/hicolor"
+  touch "$DATA/icons/hicolor"
+fi
 update-desktop-database "$DATA/applications" 2>/dev/null || true
 
 case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in

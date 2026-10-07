@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-  <path fill="#222222" fill-rule="evenodd" d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/>
-  <circle cx="8" cy="8" r="2" fill="#222222"/>
+  <title>Porthole</title>
+  <!-- Wider one-pixel gaps keep the four segments distinct at tray size.
+       GNOME recolors the symbolic foreground to match the current theme. -->
+  <g fill="#2e3436">
+    <path d="M7.5 1A6.5 6.5 0 0 0 1 7.5H3.528A4.5 4.5 0 0 1 7.5 3.528Z"/>
+    <path d="M8.5 15A6.5 6.5 0 0 0 15 8.5H12.472A4.5 4.5 0 0 1 8.5 12.472Z"/>
+    <path d="M8.5 1H13.5A1.5 1.5 0 0 1 15 2.5V7.5H12.472A4.5 4.5 0 0 0 8.5 3.528Z"/>
+    <path d="M7.5 15H2.5A1.5 1.5 0 0 1 1 13.5V8.5H3.528A4.5 4.5 0 0 0 7.5 12.472Z"/>
+  </g>
 </svg>

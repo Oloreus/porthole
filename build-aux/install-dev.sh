@@ -22,10 +22,12 @@ sed "s|^Exec=porthole|Exec=$BIN|" "$ROOT/data/$APP_ID.desktop" \
   > "$DATA/applications/$APP_ID.desktop"
 
 update-desktop-database "$DATA/applications" 2>/dev/null || true
-# Deliberately don't create an icon-theme.cache in the user directory: without
-# a cache GTK scans the directory directly; a cache would go stale after icons
-# are removed and point to deleted files.
-rm -f "$DATA/icons/hicolor/icon-theme.cache"
+# Refresh on both install and uninstall so cached system icons cannot shadow
+# our local overrides. The user theme inherits the system index.theme.
+gtk-update-icon-cache --force --ignore-theme-index "$DATA/icons/hicolor"
+# Icon-theme consumers watch the theme directory, not individual SVG files.
+# Replacing an existing icon must invalidate their in-memory lookup cache too.
+touch "$DATA/icons/hicolor"
 
 case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
   de*) echo "Installiert: $DATA/applications/$APP_ID.desktop -> $BIN" ;;
