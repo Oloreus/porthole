@@ -147,3 +147,123 @@ msgstr "Schwarz"
 #: src/ui/preview.rs
 msgid "The annotations could not be applied"
 msgstr "Die Markierungen konnten nicht übernommen werden"
+
+#: src/ui/preferences.rs
+msgid "Global Shortcut"
+msgstr "Globales Tastenkürzel"
+
+#: src/ui/preferences.rs
+msgid "Default; it can be changed in the GNOME Settings under Apps → Porthole"
+msgstr "Voreinstellung; änderbar in den GNOME-Einstellungen unter Apps → Porthole"
+
+#: src/ui/preferences.rs
+msgid "Take region screenshot"
+msgstr "Bereichs-Screenshot aufnehmen"
+
+#: src/ui/preferences.rs
+msgid "Selecting an Area"
+msgstr "Bereich auswählen"
+
+#: src/ui/preferences.rs
+msgid "Select area"
+msgstr "Bereich auswählen"
+
+#: src/ui/preferences.rs
+msgid "Drag"
+msgstr "Ziehen"
+
+#: src/ui/preferences.rs
+msgid "Cancel"
+msgstr "Abbrechen"
+
+#: src/ui/preferences.rs
+msgid "Right-click"
+msgstr "Rechtsklick"
+
+#: src/ui/preferences.rs
+msgid "Screenshot Window Shortcuts"
+msgstr "Tastenkürzel im Screenshot-Fenster"
+
+#: src/ui/preferences.rs
+msgid "Copy to clipboard"
+msgstr "In die Zwischenablage kopieren"
+
+#: src/ui/preferences.rs
+msgid "Save as PNG"
+msgstr "Als PNG speichern"
+
+#: src/ui/preferences.rs
+msgid "Discard screenshot"
+msgstr "Screenshot verwerfen"
+
+#: src/ui/preferences.rs
+msgid "Undo last annotation"
+msgstr "Letzte Markierung rückgängig"
+
+#: src/ui/preferences.rs
+msgid "Switch to the pointer"
+msgstr "Zum Zeiger wechseln"
+
+#: src/ui/preferences.rs
+msgid "Fit to window"
+msgstr "An Fenster anpassen"
+
+#: src/ui/preferences.rs
+msgid "Original size (100 %)"
+msgstr "Originalgröße (100 %)"
+
+#: src/ui/preferences.rs
+msgid "Toggle fit and 100 %"
+msgstr "Zwischen Einpassen und 100 % wechseln"
+
+#: src/ui/preferences.rs
+msgid "Double-click"
+msgstr "Doppelklick"
+
+#: src/ui/preferences.rs
+msgid "Zoom"
+msgstr "Zoomen"
+
+#: src/ui/preferences.rs
+msgid "Ctrl + scroll wheel"
+msgstr "Strg + Mausrad"
+
+#: src/ui/preferences.rs
+msgid "Pan"
+msgstr "Verschieben"
+
+#: src/ui/preferences.rs
+msgid "Scroll wheel, Shift + scroll wheel"
+msgstr "Mausrad, Umschalt + Mausrad"
+
+#: src/ui/preferences.rs
+msgid "Drag with the pointer or the middle mouse button"
+msgstr "Ziehen mit dem Zeiger oder der mittleren Maustaste"
+
+#: src/ui/preferences.rs
+msgid "Typing Text"
+msgstr "Text eingeben"
+
+#: src/ui/preferences.rs
+msgid "Place text"
+msgstr "Text platzieren"
+
+#: src/ui/preferences.rs
+msgid "Click with the text tool"
+msgstr "Klick mit dem Textwerkzeug"
+
+#: src/ui/preferences.rs
+msgid "Finish text"
+msgstr "Text abschließen"
+
+#: src/ui/preferences.rs
+msgid "New line"
+msgstr "Neue Zeile"
+
+#: src/ui/preferences.rs
+msgid "Delete last character"
+msgstr "Letztes Zeichen löschen"
+
+#: src/ui/preferences.rs
+msgid "Discard text"
+msgstr "Text verwerfen"
