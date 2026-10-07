@@ -113,8 +113,12 @@ msgid "Arrow"
 msgstr "Pfeil"
 
 #: src/ui/preview.rs
-msgid "Undo last shape (Ctrl+Z)"
-msgstr "Letzte Figur rückgängig (Strg+Z)"
+msgid "Text"
+msgstr "Text"
+
+#: src/ui/preview.rs
+msgid "Undo last annotation (Ctrl+Z)"
+msgstr "Letzte Markierung rückgängig (Strg+Z)"
 
 #: src/ui/preview.rs
 msgid "Red"
@@ -141,5 +145,5 @@ msgid "Black"
 msgstr "Schwarz"
 
 #: src/ui/preview.rs
-msgid "The shapes could not be applied"
-msgstr "Die Figuren konnten nicht übernommen werden"
+msgid "The annotations could not be applied"
+msgstr "Die Markierungen konnten nicht übernommen werden"

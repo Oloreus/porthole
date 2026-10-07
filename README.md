@@ -18,11 +18,12 @@ The app's interface is currently German only; button and menu labels are quoted 
 | Pan the view | Drag the image with the left mouse button · mouse wheel (with `Shift` for horizontal) |
 | Fit / 100 % | `Ctrl+0` / `Ctrl+1` |
 | Highlight areas | Pick rectangle, ellipse or arrow in the tool bar of the preview window, then drag on the image |
-| Shape color | Palette in the tool bar; the last choice is remembered |
-| Undo last shape | `Ctrl+Z` or the undo button |
+| Add text | Pick the text tool, click on the image, type · `Enter` finishes, `Shift+Enter` starts a new line, `Esc` discards |
+| Shape and text color | Palette in the tool bar; the last choice is remembered |
+| Undo last shape or text | `Ctrl+Z` or the undo button |
 | Back to pan/zoom | `Esc` or the pointer tool · the middle mouse button pans with any tool |
 
-Zoom only affects the display: copy and save always deliver the original at full resolution, with the drawn shapes burned in (without shapes, the original bytes unchanged). 100 % means one image pixel per screen pixel.
+Zoom only affects the display: copy and save always deliver the original at full resolution, with the drawn shapes and text burned in (without any, the original bytes unchanged). 100 % means one image pixel per screen pixel.
 
 Every screenshot gets its own preview window; the windows are the buffer (RAM only, no temporary files). From GNOME 48 on, the shortcut can be changed under **Settings → Apps → Porthole → Global Shortcuts**. Autostart: tray menu → "Beim Anmelden starten" (Start at login).
 
@@ -88,7 +89,7 @@ Not everything is translated yet: buttons, tray menu and notifications (other th
 - `capture/` – backends behind `trait CaptureBackend`, UI-free. Currently `PortalScreenshotBackend`.
 - `geometry.rs`, `monitors.rs` – coordinate spaces stage ↔ image ↔ window, purely ratio-based; layout straight from Mutter. Unit-tested including multi-monitor/mixed DPI.
 - `viewport.rs` – zoom/pan state of the preview (fit vs. manual zoom, pointer-anchored zoom, pan limits), GTK-free and unit-tested. `ui/zoom_view.rs` uses it to draw the unmodified texture; scaling happens per frame on the GPU.
-- `annotations.rs` – shapes drawn on a screenshot, kept in image pixels and GTK-free. The same render nodes draw them in the preview (under the zoom/pan transform) and into the exported image (software renderer, `Screenshot::with_annotations`), so the preview matches the result.
+- `annotations.rs` – shapes and text drawn on a screenshot, kept in image pixels and GTK-free. Text is turned into glyph outlines (pango, hinting off), so it scales like the shapes. The same render nodes draw them in the preview (under the zoom/pan transform) and into the exported image (software renderer, `Screenshot::with_annotations`), so the preview matches the result.
 - `controller.rs` – state machine `Idle → Capturing → Selecting → Cropping → Idle`.
 - `ui/` – selection overlay, preview window, small main window. `services/` – clipboard, saving, shortcuts, tray, autostart.
 

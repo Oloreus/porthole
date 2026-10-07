@@ -2,7 +2,7 @@ use gtk::glib;
 use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 
-use crate::annotations::{Color, Shape, Tool};
+use crate::annotations::{Annotation, Color, Tool};
 
 mod imp {
     use std::cell::{Cell, RefCell};
@@ -36,7 +36,10 @@ mod imp {
         pub tool: Cell<Tool>,
         pub color: Cell<Color>,
         pub annotations: RefCell<Annotations>,
-        /// Receives whether any shapes exist, after each added or removed one.
+        /// Input method for the text tool (umlauts, dead keys, compose).
+        im: gtk::IMMulticontext,
+        key: RefCell<Option<gtk::EventControllerKey>>,
+        /// Receives whether any annotations exist, after each added or removed one.
         pub on_annotations_changed: RefCell<Option<AnnotationsCallback>>,
     }
 
@@ -53,6 +56,8 @@ mod imp {
             let obj = self.obj();
             obj.set_hexpand(true);
             obj.set_vexpand(true);
+            // Receives the keys while typing a text.
+            obj.set_focusable(true);
             obj.connect_scale_factor_notify(|obj| obj.queue_allocate());
             self.install_controllers();
         }
@@ -134,16 +139,34 @@ mod imp {
             snapshot.push_clip(&clip);
             snapshot.append_scaled_texture(texture, filter, &bounds);
 
-            // Shapes live in image pixels: map them onto the drawn image.
-            let shapes = self.annotations.borrow().all();
-            if !shapes.is_empty() {
+            // Annotations live in image pixels: map them onto the drawn image.
+            let annotations = self.annotations.borrow();
+            let items = annotations.all();
+            let caret = annotations.text_draft().map(|text| {
+                let mut caret = annotations::caret(text);
+                // At least one device pixel wide, also when zoomed out.
+                let min_width = (scale / zoom) as f32;
+                if caret.width() < min_width {
+                    caret = graphene::Rect::new(
+                        caret.x() + (caret.width() - min_width) / 2.0,
+                        caret.y(),
+                        min_width,
+                        caret.height(),
+                    );
+                }
+                (caret, text.color.rgba())
+            });
+            if !items.is_empty() || caret.is_some() {
                 let pixels_to_widget = (zoom / scale) as f32;
                 snapshot.push_clip(&bounds);
                 snapshot.save();
                 snapshot.translate(&graphene::Point::new(bounds.x(), bounds.y()));
                 snapshot.scale(pixels_to_widget, pixels_to_widget);
-                for node in annotations::render_nodes(&shapes) {
+                for node in annotations::render_nodes(&items) {
                     snapshot.append_node(node);
+                }
+                if let Some((caret, color)) = caret {
+                    snapshot.append_color(&color, &caret);
                 }
                 snapshot.restore();
                 snapshot.pop();
@@ -194,6 +217,7 @@ mod imp {
                     let imp = obj.imp();
                     match imp.tool.get() {
                         Tool::Shape(kind) => imp.begin_shape(kind, (x, y)),
+                        Tool::Text => imp.begin_text((x, y)),
                         Tool::Pointer => imp.begin_pan(),
                     }
                 }
@@ -261,12 +285,76 @@ mod imp {
                 #[weak]
                 obj,
                 move |_, n_press, x, y| {
-                    if n_press == 2 {
+                    // With the text tool, the second click places the text.
+                    if n_press == 2 && obj.imp().tool.get() != Tool::Text {
                         obj.imp().toggle_zoom((x, y));
                     }
                 }
             ));
             obj.add_controller(double_click);
+
+            // Typing: the input method turns key presses into text; the
+            // controller is only attached to it while a text is being typed.
+            self.im.set_client_widget(Some(&*obj));
+            self.im.connect_commit(glib::clone!(
+                #[weak]
+                obj,
+                move |_, input| {
+                    let imp = obj.imp();
+                    imp.annotations.borrow_mut().insert(input);
+                    imp.text_changed();
+                }
+            ));
+            let key = gtk::EventControllerKey::new();
+            key.connect_key_pressed(glib::clone!(
+                #[weak]
+                obj,
+                #[upgrade_or]
+                glib::Propagation::Proceed,
+                move |_, keyval, _, state| obj.imp().on_key_pressed(keyval, state)
+            ));
+            obj.add_controller(key.clone());
+            self.key.replace(Some(key));
+
+            // Focus moved elsewhere (other widget, other window): done typing.
+            let focus = gtk::EventControllerFocus::new();
+            focus.connect_leave(glib::clone!(
+                #[weak]
+                obj,
+                move |_| obj.imp().finish_text(true)
+            ));
+            obj.add_controller(focus);
+        }
+
+        /// Keys while typing a text. Shortcuts with Ctrl or Alt (copy, save,
+        /// undo …) still reach the window; everything else stays here, so
+        /// e.g. Delete doesn't discard the screenshot.
+        fn on_key_pressed(&self, keyval: gdk::Key, state: gdk::ModifierType) -> glib::Propagation {
+            if !self.annotations.borrow().is_editing_text() {
+                return glib::Propagation::Proceed;
+            }
+            if state.intersects(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::ALT_MASK) {
+                return glib::Propagation::Proceed;
+            }
+            match keyval {
+                gdk::Key::Return | gdk::Key::KP_Enter | gdk::Key::ISO_Enter => {
+                    if state.contains(gdk::ModifierType::SHIFT_MASK) {
+                        self.annotations.borrow_mut().insert("\n");
+                        self.text_changed();
+                    } else {
+                        self.finish_text(true);
+                    }
+                }
+                gdk::Key::BackSpace => {
+                    self.annotations.borrow_mut().backspace();
+                    self.text_changed();
+                }
+                gdk::Key::Escape => self.finish_text(false),
+                // Let Tab move the focus, which also finishes the text.
+                gdk::Key::Tab | gdk::Key::ISO_Left_Tab => return glib::Propagation::Proceed,
+                _ => {}
+            }
+            glib::Propagation::Stop
         }
 
         fn on_scroll(
@@ -338,6 +426,72 @@ mod imp {
             }
         }
 
+        /// Finishes a text being typed and starts a new one at `point`.
+        fn begin_text(&self, point: (f64, f64)) {
+            self.finish_text(true);
+            let Some((size, point)) = self.pixel_point(point) else {
+                return;
+            };
+            let font_size = annotations::default_font_size(size.0, size.1);
+            self.annotations
+                .borrow_mut()
+                .begin_text(self.color.get(), font_size, point);
+            let obj = self.obj();
+            obj.grab_focus();
+            if let Some(key) = self.key.borrow().as_ref() {
+                key.set_im_context(Some(&self.im));
+            }
+            self.im.focus_in();
+            self.text_changed();
+        }
+
+        /// Ends typing: keeps the text on `commit`, drops it otherwise.
+        pub fn finish_text(&self, commit: bool) {
+            let added = {
+                let mut annotations = self.annotations.borrow_mut();
+                if !annotations.is_editing_text() {
+                    return;
+                }
+                if commit {
+                    annotations.commit_text()
+                } else {
+                    annotations.cancel_text();
+                    false
+                }
+            };
+            self.im.focus_out();
+            self.im.reset();
+            if let Some(key) = self.key.borrow().as_ref() {
+                key.set_im_context(None::<&gtk::IMContext>);
+            }
+            self.obj().queue_draw();
+            if added {
+                self.notify_annotations();
+            }
+        }
+
+        /// Redraws the text being typed and tells the input method where
+        /// the caret is, for its candidate popup.
+        fn text_changed(&self) {
+            self.obj().queue_draw();
+            let caret = self.annotations.borrow().text_draft().map(annotations::caret);
+            let Some(caret) = caret else {
+                return;
+            };
+            let scale = self.surface_scale();
+            let viewport = self.viewport.borrow();
+            let rect = viewport.image_rect();
+            let factor = viewport.zoom() / scale;
+            let x = rect.x + f64::from(caret.x()) * factor;
+            let y = rect.y + f64::from(caret.y()) * factor;
+            self.im.set_cursor_location(&gdk::Rectangle::new(
+                x.round() as i32,
+                y.round() as i32,
+                1,
+                (f64::from(caret.height()) * factor).ceil() as i32,
+            ));
+        }
+
         fn begin_shape(&self, kind: annotations::ShapeKind, point: (f64, f64)) {
             let Some((size, point)) = self.pixel_point(point) else {
                 return;
@@ -406,7 +560,7 @@ mod imp {
 
         /// Nach jeder Änderung von Zoom oder Pan.
         pub fn changed(&self) {
-            self.obj().queue_draw();
+            self.text_changed();
             self.update_cursor();
             self.notify_zoom();
         }
@@ -414,6 +568,8 @@ mod imp {
         pub fn update_cursor(&self) {
             let cursor = if self.drag_start_pan.get().is_some() {
                 Some("grabbing")
+            } else if self.tool.get() == Tool::Text {
+                Some("text")
             } else if self.tool.get() != Tool::Pointer {
                 Some("crosshair")
             } else if self.viewport.borrow().is_pannable() {
@@ -478,31 +634,42 @@ impl ZoomView {
 
     pub fn set_tool(&self, tool: Tool) {
         let imp = self.imp();
+        imp.finish_text(true);
         imp.tool.set(tool);
         imp.update_cursor();
     }
 
-    /// Color for shapes drawn from now on; existing ones keep theirs.
+    /// Color for annotations drawn from now on and for the text being
+    /// typed; existing ones keep theirs.
     pub fn set_color(&self, color: Color) {
-        self.imp().color.set(color);
+        let imp = self.imp();
+        imp.color.set(color);
+        imp.annotations.borrow_mut().set_text_color(color);
+        self.queue_draw();
     }
 
-    /// Removes the most recent shape.
+    /// Keeps the text being typed, e.g. before it is copied or saved.
+    pub fn commit_text(&self) {
+        self.imp().finish_text(true);
+    }
+
+    /// Removes the most recent annotation; a text being typed counts as one.
     pub fn undo_annotation(&self) {
         let imp = self.imp();
+        imp.finish_text(true);
         if imp.annotations.borrow_mut().undo() {
             self.queue_draw();
             imp.notify_annotations();
         }
     }
 
-    /// The committed shapes and their revision (changes with every edit).
-    pub fn annotations(&self) -> (Vec<Shape>, u64) {
+    /// The committed annotations and their revision (changes with every edit).
+    pub fn annotations(&self) -> (Vec<Annotation>, u64) {
         let annotations = self.imp().annotations.borrow();
-        (annotations.shapes().to_vec(), annotations.revision())
+        (annotations.items().to_vec(), annotations.revision())
     }
 
-    /// `callback` receives whether any shapes exist, after each change.
+    /// `callback` receives whether any annotations exist, after each change.
     pub fn connect_annotations_changed(&self, callback: impl Fn(bool) + 'static) {
         self.imp().on_annotations_changed.replace(Some(Box::new(callback)));
     }

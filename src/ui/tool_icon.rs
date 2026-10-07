@@ -65,6 +65,16 @@ mod imp {
                     snapshot.append_fill(&builder.to_path(), gsk::FillRule::Winding, &color);
                     return;
                 }
+                Tool::Text => {
+                    // A "T": top bar and stem, on whole coordinates like the shapes.
+                    let builder = gsk::PathBuilder::new();
+                    builder.move_to(3.0, 3.0);
+                    builder.line_to(13.0, 3.0);
+                    builder.move_to(8.0, 3.0);
+                    builder.line_to(8.0, 14.0);
+                    snapshot.append_stroke(&builder.to_path(), &annotations::stroke(2.0), &color);
+                    return;
+                }
                 Tool::Shape(kind) => kind,
             };
             // Same geometry as the shapes on the screenshot.

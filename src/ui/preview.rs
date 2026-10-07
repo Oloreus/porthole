@@ -19,7 +19,7 @@ const MIN_HEIGHT: i32 = 200;
 /// Header-, Werkzeug- und Aktionsleiste, für die Startgröße des Fensters.
 const CHROME_HEIGHT: i32 = 142;
 
-/// The image with its shapes burned in, keyed by the annotation revision it
+/// The image with its annotations burned in, keyed by the annotation revision it
 /// was rendered from – copying twice doesn't render twice.
 type ExportCache = Rc<RefCell<Option<(u64, Rc<Screenshot>)>>>;
 
@@ -107,6 +107,7 @@ fn tools_bar(view: &ZoomView) -> (gtk::Box, gtk::ToggleButton) {
         (Tool::Shape(ShapeKind::Rectangle), tr("Rectangle")),
         (Tool::Shape(ShapeKind::Ellipse), tr("Ellipse")),
         (Tool::Shape(ShapeKind::Arrow), tr("Arrow")),
+        (Tool::Text, tr("Text")),
     ] {
         let button = gtk::ToggleButton::builder()
             .child(&ToolIcon::new(tool))
@@ -144,6 +145,8 @@ fn tools_bar(view: &ZoomView) -> (gtk::Box, gtk::ToggleButton) {
             .child(&swatch)
             .tooltip_text(label)
             .css_classes(["flat", "circular"])
+            // Keeps the focus on the image, so typing a text continues.
+            .focus_on_click(false)
             .build();
         button.update_property(&[gtk::accessible::Property::Label(label)]);
         button.set_group(first_color.as_ref());
@@ -166,7 +169,7 @@ fn tools_bar(view: &ZoomView) -> (gtk::Box, gtk::ToggleButton) {
     let undo = gtk::Button::builder()
         .icon_name("edit-undo-symbolic")
         .action_name("preview.undo")
-        .tooltip_text(tr("Undo last shape (Ctrl+Z)"))
+        .tooltip_text(tr("Undo last annotation (Ctrl+Z)"))
         .build();
 
     let bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
@@ -215,11 +218,13 @@ fn ensure_css(display: &gdk::Display) {
     );
 }
 
-/// What copy and save deliver: the original if there are no shapes (same
-/// bytes as before, no re-encoding), else the image with the shapes.
+/// What copy and save deliver: the original if there are no annotations
+/// (same bytes as before, no re-encoding), else the image with them. A text
+/// still being typed is included.
 fn current_image(view: &ZoomView, original: &Rc<Screenshot>, cache: &ExportCache) -> Option<Rc<Screenshot>> {
-    let (shapes, revision) = view.annotations();
-    if shapes.is_empty() {
+    view.commit_text();
+    let (annotations, revision) = view.annotations();
+    if annotations.is_empty() {
         return Some(original.clone());
     }
     if let Some((cached_revision, image)) = cache.borrow().as_ref() {
@@ -228,11 +233,11 @@ fn current_image(view: &ZoomView, original: &Rc<Screenshot>, cache: &ExportCache
         }
     }
     let started = Instant::now();
-    let image = Rc::new(original.with_annotations(&shapes)?);
+    let image = Rc::new(original.with_annotations(&annotations)?);
     glib::g_message!(
         config::LOG_DOMAIN,
-        "Annotations: {} shapes, render + PNG {} ms",
-        shapes.len(),
+        "Annotations: {} items, render + PNG {} ms",
+        annotations.len(),
         started.elapsed().as_millis()
     );
     cache.replace(Some((revision, image.clone())));
@@ -262,7 +267,7 @@ fn install_actions(
             cache,
             move |_: &gio::SimpleActionGroup, _, _| {
                 let Some(image) = current_image(&view, &screenshot, &cache) else {
-                    show_toast(&toasts, tr("The shapes could not be applied"));
+                    show_toast(&toasts, tr("The annotations could not be applied"));
                     return;
                 };
                 let display = WidgetExt::display(&window);
@@ -294,9 +299,9 @@ fn install_actions(
             #[strong]
             cache,
             move |_: &gio::SimpleActionGroup, _, _| {
-                // Taken now: shapes drawn while the dialog is open don't count.
+                // Taken now: annotations drawn while the dialog is open don't count.
                 let Some(image) = current_image(&view, &screenshot, &cache) else {
-                    show_toast(&toasts, tr("The shapes could not be applied"));
+                    show_toast(&toasts, tr("The annotations could not be applied"));
                     return;
                 };
                 glib::MainContext::default().spawn_local(glib::clone!(
@@ -370,7 +375,7 @@ fn install_actions(
     // Undo is only available while there is something to undo.
     if let Some(undo) = group.lookup_action("undo").and_downcast::<gio::SimpleAction>() {
         undo.set_enabled(false);
-        view.connect_annotations_changed(move |has_shapes| undo.set_enabled(has_shapes));
+        view.connect_annotations_changed(move |has_annotations| undo.set_enabled(has_annotations));
     }
 
     let shortcuts = gtk::ShortcutController::new();

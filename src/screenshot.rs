@@ -1,7 +1,7 @@
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib, graphene, gsk};
 
-use crate::annotations::{self, Shape};
+use crate::annotations::{self, Annotation};
 use crate::geometry::PixelRect;
 
 const FORMAT: gdk::MemoryFormat = gdk::MemoryFormat::R8g8b8a8;
@@ -30,10 +30,10 @@ impl Screenshot {
         Some(Self { texture, png, taken_at })
     }
 
-    /// The same screenshot with `shapes` burned into the pixels, at full
+    /// The same screenshot with `annotations` burned into the pixels, at full
     /// resolution. Synchronous on purpose: copying must happen within the
     /// user action, see `services::clipboard`.
-    pub fn with_annotations(&self, shapes: &[Shape]) -> Option<Self> {
+    pub fn with_annotations(&self, annotations: &[Annotation]) -> Option<Self> {
         annotations::register_node_types();
         // Software rendering: needs no window or GPU, and its result is
         // already in memory for the PNG encoder.
@@ -43,7 +43,7 @@ impl Screenshot {
         let (width, height) = (self.texture.width(), self.texture.height());
         let bounds = graphene::Rect::new(0.0, 0.0, width as f32, height as f32);
         let mut nodes = vec![gsk::TextureNode::new(&self.texture, &bounds).upcast()];
-        nodes.extend(annotations::render_nodes(shapes));
+        nodes.extend(annotations::render_nodes(annotations));
         let root = gsk::ContainerNode::new(&nodes);
 
         let texture = renderer.render_texture(&root, Some(&bounds));
@@ -176,18 +176,28 @@ mod tests {
         assert_eq!(pixels_of(&full).len(), 12);
     }
 
-    #[test]
-    fn annotations_are_burned_in_at_full_size() {
-        use crate::annotations::{Color, ShapeKind};
-
-        let pixels = vec![0u8; 40 * 30 * BYTES_PER_PIXEL];
-        let texture: gdk::Texture =
-            gdk::MemoryTexture::new(40, 30, FORMAT, &glib::Bytes::from_owned(pixels), 40 * 4).upcast();
-        let screenshot = Screenshot {
+    fn filled_screenshot(width: i32, height: i32, value: u8) -> Screenshot {
+        let pixels = vec![value; width as usize * height as usize * BYTES_PER_PIXEL];
+        let texture: gdk::Texture = gdk::MemoryTexture::new(
+            width,
+            height,
+            FORMAT,
+            &glib::Bytes::from_owned(pixels),
+            width as usize * BYTES_PER_PIXEL,
+        )
+        .upcast();
+        Screenshot {
             png: texture.save_to_png_bytes(),
             texture,
             taken_at: glib::DateTime::now_local().unwrap(),
-        };
+        }
+    }
+
+    #[test]
+    fn annotations_are_burned_in_at_full_size() {
+        use crate::annotations::{Color, Shape, ShapeKind};
+
+        let screenshot = filled_screenshot(40, 30, 0);
         let shape = Shape {
             kind: ShapeKind::Rectangle,
             from: (10.0, 10.0),
@@ -196,7 +206,7 @@ mod tests {
             width: 2.0,
         };
 
-        let annotated = screenshot.with_annotations(&[shape]).unwrap();
+        let annotated = screenshot.with_annotations(&[Annotation::Shape(shape)]).unwrap();
         assert_eq!((annotated.texture.width(), annotated.texture.height()), (40, 30));
         let (bytes, stride) = download(&annotated.texture);
         let at = |x: usize, y: usize| {
@@ -210,6 +220,36 @@ mod tests {
         assert_eq!(at(2, 2), (0, 0, 0));
         let decoded = gdk::Texture::from_bytes(&annotated.png).unwrap();
         assert_eq!((decoded.width(), decoded.height()), (40, 30));
+    }
+
+    #[test]
+    fn text_is_burned_in_with_outline() {
+        use crate::annotations::{Color, TextItem};
+
+        let screenshot = filled_screenshot(120, 80, 255);
+        let text = TextItem {
+            origin: (10.0, 10.0),
+            text: "H".to_string(),
+            color: Color::Green,
+            size: 48.0,
+        };
+
+        let annotated = screenshot.with_annotations(&[Annotation::Text(text)]).unwrap();
+        assert_eq!((annotated.texture.width(), annotated.texture.height()), (120, 80));
+        let (bytes, stride) = download(&annotated.texture);
+        let pixels: Vec<(u8, u8, u8)> = (0..80)
+            .flat_map(|y| (0..120).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                let offset = y * stride + x * BYTES_PER_PIXEL;
+                (bytes[offset], bytes[offset + 1], bytes[offset + 2])
+            })
+            .collect();
+        let green = pixels.iter().filter(|p| **p == (0x2e, 0xc2, 0x7e)).count();
+        let black = pixels.iter().filter(|p| **p == (0, 0, 0)).count();
+        assert!(green > 50, "glyph fill: {green} green pixels");
+        assert!(black > 20, "outline: {black} black pixels");
+        // Far away from the glyph: untouched.
+        assert_eq!(pixels[79 * 120 + 119], (255, 255, 255));
     }
 
     #[test]
