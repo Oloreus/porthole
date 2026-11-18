@@ -117,8 +117,12 @@ msgid "Text"
 msgstr "Text"
 
 #: src/ui/preview.rs
-msgid "Undo last annotation (Ctrl+Z)"
-msgstr "Letzte Markierung rückgängig (Strg+Z)"
+msgid "Undo last change (Ctrl+Z)"
+msgstr "Letzte Änderung rückgängig (Strg+Z)"
+
+#: src/ui/preview.rs
+msgid "Remove text (Ctrl+Delete)"
+msgstr "Text entfernen (Strg+Entf)"
 
 #: src/ui/preview.rs
 msgid "Red"
@@ -197,8 +201,8 @@ msgid "Discard screenshot"
 msgstr "Screenshot verwerfen"
 
 #: src/ui/preferences.rs
-msgid "Undo last annotation"
-msgstr "Letzte Markierung rückgängig"
+msgid "Undo last change"
+msgstr "Letzte Änderung rückgängig"
 
 #: src/ui/preferences.rs
 msgid "Switch to the pointer"
@@ -265,5 +269,45 @@ msgid "Delete last character"
 msgstr "Letztes Zeichen löschen"
 
 #: src/ui/preferences.rs
-msgid "Discard text"
-msgstr "Text verwerfen"
+msgid "Discard text or changes"
+msgstr "Text oder Änderungen verwerfen"
+
+#: src/ui/preferences.rs
+msgid "Edit text"
+msgstr "Text bearbeiten"
+
+#: src/ui/preferences.rs
+msgid "Click on a text with the text tool"
+msgstr "Klick auf einen Text mit dem Textwerkzeug"
+
+#: src/ui/preferences.rs
+msgid "Paste"
+msgstr "Einfügen"
+
+#: src/ui/preferences.rs
+msgid "Move cursor"
+msgstr "Cursor bewegen"
+
+#: src/ui/preferences.rs
+msgid "Delete next character"
+msgstr "Nächstes Zeichen löschen"
+
+#: src/ui/preferences.rs
+msgid "Remove text"
+msgstr "Text entfernen"
+
+#: src/ui/preferences.rs
+msgid "Delete all characters, then Return"
+msgstr "Alle Zeichen löschen, dann Eingabetaste"
+
+#: src/ui/preferences.rs
+msgid "Move text"
+msgstr "Text verschieben"
+
+#: src/ui/preferences.rs
+msgid "Drag a text with the text tool"
+msgstr "Text mit dem Textwerkzeug ziehen"
+
+#: src/ui/preferences.rs
+msgid "Right-click on a text, with any tool"
+msgstr "Rechtsklick auf einen Text, mit jedem Werkzeug"

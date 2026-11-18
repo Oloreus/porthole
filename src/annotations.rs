@@ -19,7 +19,9 @@ const ARROW_HEAD_ANGLE: f64 = std::f64::consts::PI / 6.0;
 /// Font of the text annotations; the size comes from the image.
 const FONT: &str = "Sans Bold";
 /// Outline stroke width per font size. Half of it lies under the glyph fill.
-const OUTLINE_RATIO: f64 = 1.0 / 6.0;
+const OUTLINE_RATIO: f64 = 1.0 / 10.0;
+/// Minimum outline stroke width in image pixels (about one pixel visible).
+const MIN_OUTLINE: f64 = 2.0;
 /// Caret width per font size.
 const CARET_RATIO: f64 = 1.0 / 12.0;
 
@@ -166,6 +168,25 @@ pub enum Annotation {
     Text(TextItem),
 }
 
+/// A committed text taken out for editing.
+#[derive(Debug)]
+struct Edit {
+    /// Its place in the drawing order.
+    index: usize,
+    original: TextItem,
+    /// Committed annotations before the edit, for undo.
+    before: Vec<Annotation>,
+}
+
+/// A committed text being dragged to another place.
+#[derive(Debug)]
+struct Move {
+    index: usize,
+    start_origin: (f64, f64),
+    /// Committed annotations before the move, for undo.
+    before: Vec<Annotation>,
+}
+
 /// The annotations of one screenshot plus the shape being dragged or the
 /// text being typed right now.
 #[derive(Debug, Default)]
@@ -173,6 +194,12 @@ pub struct Annotations {
     items: Vec<Annotation>,
     draft: Option<Shape>,
     text_draft: Option<TextItem>,
+    /// Caret position in the text being typed: byte index on a char boundary.
+    cursor: usize,
+    editing: Option<Edit>,
+    moving: Option<Move>,
+    /// Committed annotations before each change, newest last.
+    history: Vec<Vec<Annotation>>,
     /// Increases with every change of the committed annotations; lets callers
     /// cache an exported image.
     revision: u64,
@@ -199,8 +226,8 @@ impl Annotations {
     pub fn commit(&mut self) -> bool {
         match self.draft.take() {
             Some(draft) if !draft.is_degenerate() => {
+                self.record(self.items.clone());
                 self.items.push(Annotation::Shape(draft));
-                self.revision += 1;
                 true
             }
             _ => false,
@@ -224,21 +251,181 @@ impl Annotations {
             color,
             size,
         };
-        text.origin.1 -= caret(&text).height() as f64 / 2.0;
+        text.origin.1 -= caret(&text, 0).height() as f64 / 2.0;
         self.text_draft = Some(text);
+        self.cursor = 0;
+        self.editing = None;
     }
 
+    /// Topmost committed text at `point` (image pixels), as an index into
+    /// [`Self::items`].
+    pub fn text_at(&self, point: (f64, f64)) -> Option<usize> {
+        self.items.iter().rposition(|item| match item {
+            Annotation::Text(text) => text_bounds(text).contains_point(&graphene::Point::new(
+                point.0 as f32,
+                point.1 as f32,
+            )),
+            Annotation::Shape(_) => false,
+        })
+    }
+
+    /// Takes the committed text at `index` out for editing, caret at its
+    /// end. Committing puts it back at the same place in the drawing order.
+    pub fn begin_edit(&mut self, index: usize) {
+        if !matches!(self.items.get(index), Some(Annotation::Text(_))) {
+            return;
+        }
+        let before = self.items.clone();
+        let Annotation::Text(text) = self.items.remove(index) else {
+            unreachable!();
+        };
+        self.cursor = text.text.len();
+        self.text_draft = Some(text.clone());
+        self.editing = Some(Edit {
+            index,
+            original: text,
+            before,
+        });
+    }
+
+    /// Starts dragging the committed text at `index`.
+    pub fn begin_move(&mut self, index: usize) {
+        if let Some(Annotation::Text(text)) = self.items.get(index) {
+            self.moving = Some(Move {
+                index,
+                start_origin: text.origin,
+                before: self.items.clone(),
+            });
+        }
+    }
+
+    /// Moves the dragged text by `delta` (image pixels) from where the drag
+    /// started.
+    pub fn update_move(&mut self, delta: (f64, f64)) {
+        let Some(moving) = &self.moving else {
+            return;
+        };
+        if let Some(Annotation::Text(text)) = self.items.get_mut(moving.index) {
+            text.origin = (
+                moving.start_origin.0 + delta.0,
+                moving.start_origin.1 + delta.1,
+            );
+        }
+    }
+
+    /// Finishes the drag. Returns `true` if the text ended up elsewhere.
+    pub fn commit_move(&mut self) -> bool {
+        let Some(moving) = self.moving.take() else {
+            return false;
+        };
+        let moved = matches!(
+            self.items.get(moving.index),
+            Some(Annotation::Text(text)) if text.origin != moving.start_origin
+        );
+        if moved {
+            self.record(moving.before);
+        }
+        moved
+    }
+
+    /// Puts the dragged text back where it was.
+    pub fn cancel_move(&mut self) {
+        if let Some(moving) = self.moving.take() {
+            if let Some(Annotation::Text(text)) = self.items.get_mut(moving.index) {
+                text.origin = moving.start_origin;
+            }
+        }
+    }
+
+    pub fn is_moving(&self) -> bool {
+        self.moving.is_some()
+    }
+
+    /// Removes the committed text at `index`. Returns `false` if there is
+    /// no text.
+    pub fn remove_text(&mut self, index: usize) -> bool {
+        if !matches!(self.items.get(index), Some(Annotation::Text(_))) {
+            return false;
+        }
+        self.record(self.items.clone());
+        self.items.remove(index);
+        true
+    }
+
+    /// Drops the text being typed; an edited text is removed for good.
+    /// Returns `true` if the committed annotations changed.
+    pub fn remove_edited_text(&mut self) -> bool {
+        self.text_draft = None;
+        match self.editing.take() {
+            Some(edit) => {
+                self.record(edit.before);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Inserts at the caret and moves the caret behind the input.
     pub fn insert(&mut self, input: &str) {
         if let Some(draft) = &mut self.text_draft {
-            draft.text.push_str(input);
+            draft.text.insert_str(self.cursor, input);
+            self.cursor += input.len();
         }
     }
 
-    /// Removes the last character of the text being typed.
+    /// Removes the character before the caret.
     pub fn backspace(&mut self) {
         if let Some(draft) = &mut self.text_draft {
-            draft.text.pop();
+            if let Some((index, _)) = draft.text[..self.cursor].char_indices().next_back() {
+                draft.text.remove(index);
+                self.cursor = index;
+            }
         }
+    }
+
+    /// Removes the character after the caret.
+    pub fn delete(&mut self) {
+        if let Some(draft) = &mut self.text_draft {
+            if self.cursor < draft.text.len() {
+                draft.text.remove(self.cursor);
+            }
+        }
+    }
+
+    pub fn move_left(&mut self) {
+        if let Some(draft) = &self.text_draft {
+            if let Some((index, _)) = draft.text[..self.cursor].char_indices().next_back() {
+                self.cursor = index;
+            }
+        }
+    }
+
+    pub fn move_right(&mut self) {
+        if let Some(draft) = &self.text_draft {
+            if let Some(c) = draft.text[self.cursor..].chars().next() {
+                self.cursor += c.len_utf8();
+            }
+        }
+    }
+
+    /// Caret to the start of its line.
+    pub fn move_home(&mut self) {
+        if let Some(draft) = &self.text_draft {
+            self.cursor = draft.text[..self.cursor].rfind('\n').map_or(0, |index| index + 1);
+        }
+    }
+
+    /// Caret to the end of its line.
+    pub fn move_end(&mut self) {
+        if let Some(draft) = &self.text_draft {
+            self.cursor += draft.text[self.cursor..]
+                .find('\n')
+                .unwrap_or(draft.text.len() - self.cursor);
+        }
+    }
+
+    pub fn text_cursor(&self) -> usize {
+        self.cursor
     }
 
     /// Color for the text being typed, e.g. after picking another one.
@@ -248,21 +435,44 @@ impl Annotations {
         }
     }
 
-    /// Finishes typing. Returns `true` if a text was added; blank text is
-    /// dropped.
+    /// Finishes typing. Returns `true` if the committed annotations changed:
+    /// a new text was added, or an edited one was changed or removed. Blank
+    /// text is dropped.
     pub fn commit_text(&mut self) -> bool {
-        match self.text_draft.take() {
-            Some(draft) if !draft.text.trim().is_empty() => {
+        let Some(draft) = self.text_draft.take() else {
+            return false;
+        };
+        let blank = draft.text.trim().is_empty();
+        match self.editing.take() {
+            Some(edit) => {
+                let changed = blank || draft != edit.original;
+                if changed {
+                    self.record(edit.before);
+                }
+                self.items.insert(
+                    edit.index,
+                    Annotation::Text(if changed { draft } else { edit.original }),
+                );
+                if blank {
+                    self.items.remove(edit.index);
+                }
+                changed
+            }
+            None if blank => false,
+            None => {
+                self.record(self.items.clone());
                 self.items.push(Annotation::Text(draft));
-                self.revision += 1;
                 true
             }
-            _ => false,
         }
     }
 
+    /// Drops the text being typed; an edited text goes back unchanged.
     pub fn cancel_text(&mut self) {
         self.text_draft = None;
+        if let Some(edit) = self.editing.take() {
+            self.items.insert(edit.index, Annotation::Text(edit.original));
+        }
     }
 
     pub fn text_draft(&self) -> Option<&TextItem> {
@@ -273,13 +483,28 @@ impl Annotations {
         self.text_draft.is_some()
     }
 
-    /// Removes the most recent annotation. Returns `false` if there was none.
+    /// Remembers `before` as the state to go back to and marks the committed
+    /// annotations as changed. Call it right before (or after) the change.
+    fn record(&mut self, before: Vec<Annotation>) {
+        self.history.push(before);
+        self.revision += 1;
+    }
+
+    /// Reverts the most recent change: added, edited, moved or removed
+    /// annotation. Returns `false` if there was none.
     pub fn undo(&mut self) -> bool {
-        let removed = self.items.pop().is_some();
-        if removed {
-            self.revision += 1;
+        match self.history.pop() {
+            Some(before) => {
+                self.items = before;
+                self.revision += 1;
+                true
+            }
+            None => false,
         }
-        removed
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.history.is_empty()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -410,10 +635,26 @@ fn text_path(text: &TextItem) -> gsk::Path {
     builder.to_path()
 }
 
-/// Caret after the last character, in image pixels.
-pub fn caret(text: &TextItem) -> graphene::Rect {
+/// Area a text covers including its outline, in image pixels.
+fn text_bounds(text: &TextItem) -> graphene::Rect {
+    let (_, logical) = layout(text).pixel_extents();
+    let pad = outline_width(text) / 2.0;
+    graphene::Rect::new(
+        (text.origin.0 + f64::from(logical.x()) - pad) as f32,
+        (text.origin.1 + f64::from(logical.y()) - pad) as f32,
+        (f64::from(logical.width()) + 2.0 * pad) as f32,
+        (f64::from(logical.height()) + 2.0 * pad) as f32,
+    )
+}
+
+fn outline_width(text: &TextItem) -> f64 {
+    (text.size * OUTLINE_RATIO).max(MIN_OUTLINE)
+}
+
+/// Caret before the byte index `cursor`, in image pixels.
+pub fn caret(text: &TextItem, cursor: usize) -> graphene::Rect {
     let layout = layout(text);
-    let (strong, _) = layout.cursor_pos(text.text.len() as i32);
+    let (strong, _) = layout.cursor_pos(cursor.min(text.text.len()) as i32);
     let units = |value: i32| f64::from(value) / f64::from(pango::SCALE);
     let width = text.size * CARET_RATIO;
     graphene::Rect::new(
@@ -465,7 +706,7 @@ fn text_node(text: &TextItem) -> Option<gsk::RenderNode> {
     if path.is_empty() {
         return None;
     }
-    let stroke = stroke(text.size * OUTLINE_RATIO);
+    let stroke = stroke(outline_width(text));
     let outline_color = gsk::ColorNode::new(
         &text.color.outline().rgba(),
         &path.stroke_bounds(&stroke)?,
@@ -658,7 +899,7 @@ mod tests {
     fn first_line_is_centered_on_the_click() {
         let mut annotations = Annotations::default();
         annotations.begin_text(Color::Red, 20.0, (10.0, 50.0));
-        let caret = caret(annotations.text_draft().unwrap());
+        let caret = caret(annotations.text_draft().unwrap(), 0);
         let center = f64::from(caret.y() + caret.height() / 2.0);
         assert!((center - 50.0).abs() < 0.5, "caret center at {center}");
         assert!((f64::from(caret.x() + caret.width() / 2.0) - 10.0).abs() < 0.5);
@@ -683,11 +924,195 @@ mod tests {
 
     #[test]
     fn caret_moves_with_the_text() {
-        let empty = caret(&text("", 20.0));
-        let typed = caret(&text("Hi", 20.0));
-        let two_lines = caret(&text("Hi\n", 20.0));
+        let empty = caret(&text("", 20.0), 0);
+        let typed = caret(&text("Hi", 20.0), 2);
+        let two_lines = caret(&text("Hi\n", 20.0), 3);
         assert!(typed.x() > empty.x());
         assert!(two_lines.y() > typed.y());
         assert_eq!(two_lines.x(), empty.x());
+        assert_eq!(caret(&text("Hi", 20.0), 0).x(), empty.x());
+    }
+
+    fn committed_text(annotations: &mut Annotations, content: &str, point: (f64, f64)) {
+        annotations.begin_text(Color::Red, 20.0, point);
+        annotations.insert(content);
+        assert!(annotations.commit_text());
+    }
+
+    #[test]
+    fn cursor_edits_in_the_middle() {
+        let mut annotations = Annotations::default();
+        annotations.begin_text(Color::Red, 20.0, (0.0, 0.0));
+        annotations.insert("Grüße\nab");
+        annotations.move_home();
+        annotations.move_left();
+        annotations.move_left();
+        annotations.backspace();
+        annotations.delete();
+        annotations.insert("ß");
+        assert_eq!(annotations.text_draft().unwrap().text, "Grüß\nab");
+        annotations.move_end();
+        annotations.insert("!");
+        annotations.move_right();
+        annotations.move_end();
+        annotations.insert("c");
+        assert_eq!(annotations.text_draft().unwrap().text, "Grüß!\nabc");
+        annotations.move_home();
+        annotations.delete();
+        assert_eq!(annotations.text_draft().unwrap().text, "Grüß!\nbc");
+    }
+
+    #[test]
+    fn texts_are_found_by_position() {
+        let mut annotations = Annotations::default();
+        drag(&mut annotations, ShapeKind::Rectangle, (0.0, 0.0), (300.0, 300.0));
+        committed_text(&mut annotations, "Hello", (20.0, 50.0));
+        assert_eq!(annotations.text_at((30.0, 50.0)), Some(1));
+        assert_eq!(annotations.text_at((250.0, 250.0)), None);
+        assert_eq!(annotations.text_at((10.0, 5.0)), None);
+    }
+
+    #[test]
+    fn editing_keeps_the_drawing_order() {
+        let mut annotations = Annotations::default();
+        committed_text(&mut annotations, "One", (20.0, 50.0));
+        drag(&mut annotations, ShapeKind::Arrow, (0.0, 0.0), (20.0, 20.0));
+        let revision = annotations.revision();
+
+        annotations.begin_edit(0);
+        assert_eq!(annotations.items().len(), 1);
+        assert_eq!(annotations.all().len(), 2, "edited text stays visible");
+        annotations.insert("!");
+        assert!(annotations.commit_text());
+        assert_eq!(annotations.revision(), revision + 1);
+        let Annotation::Text(edited) = &annotations.items()[0] else {
+            panic!("expected the text at its old place");
+        };
+        assert_eq!(edited.text, "One!");
+
+        // Unchanged: no new revision.
+        annotations.begin_edit(0);
+        assert!(!annotations.commit_text());
+        assert_eq!(annotations.revision(), revision + 1);
+    }
+
+    #[test]
+    fn cancelled_edit_restores_the_original() {
+        let mut annotations = Annotations::default();
+        committed_text(&mut annotations, "One", (20.0, 50.0));
+        annotations.begin_edit(0);
+        annotations.backspace();
+        annotations.cancel_text();
+        assert_eq!(annotations.items().len(), 1);
+        assert!(matches!(&annotations.items()[0], Annotation::Text(t) if t.text == "One"));
+        assert_eq!(annotations.revision(), 1);
+    }
+
+    #[test]
+    fn emptied_text_is_removed() {
+        let mut annotations = Annotations::default();
+        committed_text(&mut annotations, "Hi", (20.0, 50.0));
+        annotations.begin_edit(0);
+        annotations.backspace();
+        annotations.backspace();
+        assert!(annotations.commit_text());
+        assert!(annotations.is_empty());
+        assert_eq!(annotations.revision(), 2);
+    }
+
+    fn origin(annotations: &Annotations, index: usize) -> (f64, f64) {
+        match &annotations.items()[index] {
+            Annotation::Text(text) => text.origin,
+            Annotation::Shape(_) => panic!("expected a text"),
+        }
+    }
+
+    #[test]
+    fn moving_a_text_and_undoing_it() {
+        let mut annotations = Annotations::default();
+        committed_text(&mut annotations, "Hi", (20.0, 50.0));
+        let start = origin(&annotations, 0);
+
+        annotations.begin_move(0);
+        assert!(annotations.is_moving());
+        annotations.update_move((5.0, 5.0));
+        annotations.update_move((30.0, -10.0));
+        assert_eq!(annotations.revision(), 1, "no revision while dragging");
+        assert!(annotations.commit_move());
+        assert!(!annotations.is_moving());
+        assert_eq!(origin(&annotations, 0), (start.0 + 30.0, start.1 - 10.0));
+        assert_eq!(annotations.revision(), 2);
+
+        assert!(annotations.undo());
+        assert_eq!(origin(&annotations, 0), start);
+        assert_eq!(annotations.items().len(), 1);
+    }
+
+    #[test]
+    fn moves_without_distance_or_cancelled_change_nothing() {
+        let mut annotations = Annotations::default();
+        committed_text(&mut annotations, "Hi", (20.0, 50.0));
+        let start = origin(&annotations, 0);
+
+        annotations.begin_move(0);
+        annotations.update_move((0.0, 0.0));
+        assert!(!annotations.commit_move());
+
+        annotations.begin_move(0);
+        annotations.update_move((40.0, 40.0));
+        annotations.cancel_move();
+        assert_eq!(origin(&annotations, 0), start);
+        assert_eq!(annotations.revision(), 1);
+
+        // Shapes can't be moved.
+        drag(&mut annotations, ShapeKind::Arrow, (0.0, 0.0), (20.0, 20.0));
+        annotations.begin_move(1);
+        assert!(!annotations.is_moving());
+    }
+
+    #[test]
+    fn removing_texts_and_undoing_it() {
+        let mut annotations = Annotations::default();
+        committed_text(&mut annotations, "One", (20.0, 50.0));
+        drag(&mut annotations, ShapeKind::Arrow, (0.0, 0.0), (20.0, 20.0));
+        committed_text(&mut annotations, "Two", (20.0, 150.0));
+
+        assert!(!annotations.remove_text(1), "not a text");
+        assert!(annotations.remove_text(0));
+        assert_eq!(annotations.items().len(), 2);
+
+        annotations.begin_edit(1);
+        annotations.insert("!");
+        assert!(annotations.remove_edited_text());
+        assert!(!annotations.is_editing_text());
+        assert_eq!(annotations.items().len(), 1);
+        assert!(matches!(annotations.items()[0], Annotation::Shape(_)));
+
+        assert!(annotations.undo());
+        assert!(matches!(&annotations.items()[1], Annotation::Text(t) if t.text == "Two"));
+        assert!(annotations.undo());
+        assert!(matches!(&annotations.items()[0], Annotation::Text(t) if t.text == "One"));
+        assert_eq!(annotations.items().len(), 3);
+
+        // A new text being typed is only dropped.
+        annotations.begin_text(Color::Red, 20.0, (0.0, 0.0));
+        annotations.insert("x");
+        assert!(!annotations.remove_edited_text());
+        assert_eq!(annotations.items().len(), 3);
+    }
+
+    #[test]
+    fn undo_restores_an_edited_text() {
+        let mut annotations = Annotations::default();
+        committed_text(&mut annotations, "One", (20.0, 50.0));
+        drag(&mut annotations, ShapeKind::Arrow, (0.0, 0.0), (20.0, 20.0));
+        annotations.begin_edit(0);
+        annotations.insert("!");
+        assert!(annotations.commit_text());
+
+        assert!(annotations.undo());
+        assert_eq!(annotations.items().len(), 2, "the arrow stays");
+        assert!(matches!(&annotations.items()[0], Annotation::Text(t) if t.text == "One"));
+        assert!(annotations.can_undo());
     }
 }

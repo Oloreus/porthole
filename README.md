@@ -19,8 +19,11 @@ The app's interface is currently German only; button and menu labels are quoted 
 | Fit / 100 % | `Ctrl+0` / `Ctrl+1` |
 | Highlight areas | Pick rectangle, ellipse or arrow in the tool bar of the preview window, then drag on the image |
 | Add text | Pick the text tool, click on the image, type · `Enter` finishes, `Shift+Enter` starts a new line, `Esc` discards |
+| Edit text | With the text tool, click on an existing text · `←`/`→`/`Home`/`End` move the cursor, `Ctrl+V` pastes, `Esc` restores the original, emptying it and pressing `Enter` removes it |
+| Move text | With the text tool, drag an existing text (the cursor turns into a move cursor over texts) |
+| Remove text | `Ctrl+Delete` or the trash button while editing a text · right-click on a text with any tool |
 | Shape and text color | Palette in the tool bar; the last choice is remembered |
-| Undo last shape or text | `Ctrl+Z` or the undo button |
+| Undo last change | `Ctrl+Z` or the undo button – also reverts edited, moved and removed texts |
 | Back to pan/zoom | `Esc` or the pointer tool · the middle mouse button pans with any tool |
 
 Zoom only affects the display: copy and save always deliver the original at full resolution, with the drawn shapes and text burned in (without any, the original bytes unchanged). 100 % means one image pixel per screen pixel.

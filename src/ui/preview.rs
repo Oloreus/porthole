@@ -169,7 +169,15 @@ fn tools_bar(view: &ZoomView) -> (gtk::Box, gtk::ToggleButton) {
     let undo = gtk::Button::builder()
         .icon_name("edit-undo-symbolic")
         .action_name("preview.undo")
-        .tooltip_text(tr("Undo last annotation (Ctrl+Z)"))
+        .tooltip_text(tr("Undo last change (Ctrl+Z)"))
+        .build();
+    let remove_text = gtk::Button::builder()
+        .icon_name("user-trash-symbolic")
+        .action_name("preview.remove-text")
+        .tooltip_text(tr("Remove text (Ctrl+Delete)"))
+        // Keeps the focus on the image: losing it would commit the text
+        // before it can be removed.
+        .focus_on_click(false)
         .build();
 
     let bar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
@@ -179,6 +187,7 @@ fn tools_bar(view: &ZoomView) -> (gtk::Box, gtk::ToggleButton) {
     bar.append(&colors);
     bar.append(&gtk::Separator::new(gtk::Orientation::Vertical));
     bar.append(&undo);
+    bar.append(&remove_text);
     (bar, pointer_button)
 }
 
@@ -360,6 +369,14 @@ fn install_actions(
         ))
         .build();
 
+    let remove_text = gio::ActionEntry::builder("remove-text")
+        .activate(glib::clone!(
+            #[weak]
+            view,
+            move |_: &gio::SimpleActionGroup, _, _| view.remove_text()
+        ))
+        .build();
+
     let tool_pointer = gio::ActionEntry::builder("tool-pointer")
         .activate(glib::clone!(
             #[weak]
@@ -369,13 +386,27 @@ fn install_actions(
         .build();
 
     let group = gio::SimpleActionGroup::new();
-    group.add_action_entries([copy, save, delete, zoom_fit, zoom_original, undo, tool_pointer]);
+    group.add_action_entries([
+        copy,
+        save,
+        delete,
+        zoom_fit,
+        zoom_original,
+        undo,
+        remove_text,
+        tool_pointer,
+    ]);
     window.insert_action_group("preview", Some(&group));
 
     // Undo is only available while there is something to undo.
     if let Some(undo) = group.lookup_action("undo").and_downcast::<gio::SimpleAction>() {
         undo.set_enabled(false);
-        view.connect_annotations_changed(move |has_annotations| undo.set_enabled(has_annotations));
+        view.connect_annotations_changed(move |can_undo| undo.set_enabled(can_undo));
+    }
+    // Removing a text is only available while one is being typed or edited.
+    if let Some(remove_text) = group.lookup_action("remove-text").and_downcast::<gio::SimpleAction>() {
+        remove_text.set_enabled(false);
+        view.connect_editing_changed(move |editing| remove_text.set_enabled(editing));
     }
 
     let shortcuts = gtk::ShortcutController::new();
